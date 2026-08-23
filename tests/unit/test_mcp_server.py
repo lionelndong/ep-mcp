@@ -76,3 +76,71 @@ async def test_list_tools_modern_and_legacy(tiny_pack):
         result = await legacy.call_tool("ep_read_tool", {"path": "overview.md"})
         payload = _payload(result)
         assert "Hello" in payload.get("content", "")
+
+
+@pytest.fixture
+def tiny_hormozi_pack(tmp_path: Path):
+    pack_dir = tmp_path / "packs" / "brain"
+    (pack_dir / "agent-skills").mkdir(parents=True)
+    (pack_dir / "meta").mkdir(parents=True)
+    (pack_dir / "youtube").mkdir(parents=True)
+    (tmp_path / "skills" / "alex-hormozi" / "test-skill").mkdir(parents=True)
+    (tmp_path / "skills" / "alex-hormozi" / "test-skill" / "SKILL.md").write_text(
+        "---\nname: test-skill\ndescription: test\n---\n# Test skill\n",
+        encoding="utf-8",
+    )
+    (pack_dir / "manifest.yaml").write_text(
+        """
+slug: alex-hormozi-brain
+name: Hormozi Brain
+type: person
+version: "1.0.0"
+description: Brain fixture
+entry_point: overview.md
+context:
+  always:
+    - overview.md
+""",
+        encoding="utf-8",
+    )
+    (pack_dir / "overview.md").write_text("# Brain\n", encoding="utf-8")
+    (pack_dir / "agent-skills" / "test-skill.md").write_text(
+        "---\n"
+        "title: test-skill\n"
+        "type: workflow\n"
+        "pack: alex-hormozi-brain\n"
+        "id: alex-hormozi-brain/agent-skills/test-skill\n"
+        "---\n# Test skill\n",
+        encoding="utf-8",
+    )
+    (pack_dir / "meta" / "brain-coverage.json").write_text(
+        json.dumps({
+            "inventory_records": 1,
+            "derived_records": 1,
+            "summary": {"indexed_evidence": 1},
+            "transcripts": {"unique_videos": 1},
+            "skills": {"status": "ready", "packages": ["test-skill"], "invalid": []},
+            "extras": {"ocr": {"pages": 0}, "audio": []},
+            "records": [],
+        }),
+        encoding="utf-8",
+    )
+    return load_pack(pack_dir)
+
+
+@pytest.mark.asyncio
+async def test_hormozi_brain_tools(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = []
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        names = {tool.name for tool in (await client.list_tools()).tools}
+        assert {"search_hormozi_brain", "get_hormozi_source", "get_hormozi_skill", "get_brain_coverage"} <= names
+        coverage = _payload(await client.call_tool("get_brain_coverage", {}))
+        assert coverage["inventory_records"] == 1
+        skill = _payload(await client.call_tool("get_hormozi_skill", {"skill_name": "test-skill"}))
+        assert "# Test skill" in skill["content"]
+        search = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))
+        assert search["results"] == []

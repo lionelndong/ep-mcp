@@ -38,6 +38,7 @@ class EmbeddingConfig(BaseModel):
 
     provider options:
       - "gemini"       : Google Gemini (default). Requires GEMINI_API_KEY.
+      - "openai"       : Direct OpenAI API. Requires OPENAI_API_KEY.
       - "azure-openai" : Azure OpenAI. Requires AZURE_OPENAI_ENDPOINT and
                          AZURE_OPENAI_API_KEY (or set azure_endpoint / azure_api_key).
 
@@ -53,6 +54,9 @@ class EmbeddingConfig(BaseModel):
     provider: str = "gemini"
     model: str = "gemini-embedding-001"
     output_dimensionality: int | None = None  # MRL: None=full dim, e.g. 768=4x smaller
+    # Direct OpenAI — required when provider="openai" unless supplied by env.
+    api_key: str | None = None
+    base_url: str | None = None
     # Azure OpenAI — required when provider="azure-openai"
     azure_endpoint: str | None = None        # overrides AZURE_OPENAI_ENDPOINT env var
     azure_api_key: str | None = None         # overrides AZURE_OPENAI_API_KEY env var

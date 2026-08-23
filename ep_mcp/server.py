@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -47,6 +48,7 @@ class PackInstance:
 def create_embedding_provider(config: ServerConfig) -> EmbeddingProvider:
     """Create the configured embedding provider."""
     from .embeddings.azure_openai import AzureOpenAIEmbeddingProvider
+    from .embeddings.openai import OpenAIEmbeddingProvider
 
     emb = config.embedding
     if emb.provider == "gemini":
@@ -63,9 +65,16 @@ def create_embedding_provider(config: ServerConfig) -> EmbeddingProvider:
             azure_deployment=emb.azure_deployment,
             output_dimensionality=emb.output_dimensionality,
         )
+    if emb.provider == "openai":
+        return OpenAIEmbeddingProvider(
+            model=emb.model or "text-embedding-3-small",
+            api_key=emb.api_key,
+            base_url=emb.base_url,
+            dimensions=emb.output_dimensionality,
+        )
     raise ValueError(
         f"Unsupported embedding provider: {emb.provider!r}. "
-        f"Supported: 'gemini', 'azure-openai'"
+        f"Supported: 'gemini', 'openai', 'azure-openai'"
     )
 
 
@@ -257,6 +266,169 @@ def create_pack_mcp(
             )
             return {"error": str(e), "pack": slug, "path": path, "id": id}
 
+    # The Hormozi brain is a single composite corpus.  Keep the standard EP
+    # tools available, and add stable agent-first names that do not require a
+    # caller to know the internal pack layout.
+    if slug == "alex-hormozi-brain":
+        @mcp.tool(
+            annotations={
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            }
+        )
+        async def search_hormozi_brain(
+            query: str,
+            source_scope: str | None = None,
+            tags: list[str] | None = None,
+            max_results: int = 10,
+        ) -> dict:
+            """Search the unified Hormozi evidence, transcript, and skills brain.
+
+            Results always include a source file, content hash, confidence, and
+            a citation locator.  The result is a source-grounded perspective,
+            not an assertion that Alex Hormozi personally made the answer.
+            """
+            normalized_scope = source_scope.strip().casefold() if source_scope else None
+            results = await ep_search(
+                engine,
+                query,
+                type=normalized_scope if normalized_scope in {"reference", "workflow", "concept", "decision", "gotcha", "phase"} else None,
+                tags=tags,
+                max_results=max_results,
+                query_log_path=query_log_path,
+            )
+            if normalized_scope in {"evidence", "youtube", "curated-skills", "agent-skills", "ebook", "audio"}:
+                results = [
+                    result for result in results
+                    if str(result.get("source_file", "")).startswith(normalized_scope + "/")
+                ]
+            import re
+            for result in results:
+                url_match = re.search(r"YouTube URL:\s*(https?://\S+)", str(result.get("text", "")))
+                video_match = re.search(r"Video ID:\s*`([^`]+)`", str(result.get("text", "")))
+                timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", str(result.get("text", "")))
+                if url_match:
+                    result["source_url"] = url_match.group(1).rstrip("`),")
+                if video_match:
+                    result["video_id"] = video_match.group(1)
+                if timestamp_match:
+                    result["locator"] = timestamp_match.group(1).strip()
+            for result in results:
+                locator = result.get("line_range")
+                if locator:
+                    citation = f"{result.get('source_file')} lines {locator[0]}-{locator[1]}"
+                else:
+                    citation = str(result.get("source_file"))
+                result["citation"] = citation
+                result["source_scope"] = source_scope
+            return {
+                "query": query,
+                "perspective_disclaimer": "Synthesized from retrieved source material; not a current statement or endorsement by Alex Hormozi.",
+                "results": results,
+            }
+
+        @mcp.tool(
+            annotations={
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            }
+        )
+        async def get_hormozi_source(
+            source_id: str | None = None,
+            path: str | None = None,
+            reconstruct: bool = False,
+        ) -> dict:
+            """Read a complete cited source atom by ID or pack-relative path."""
+            resolved_id = source_id
+            if resolved_id and resolved_id.startswith("youtube-"):
+                video_id = resolved_id.removeprefix("youtube-")
+                prefix = f"youtube/"
+                candidates = [
+                    file_path for file_path in pack.files
+                    if file_path.startswith(prefix) and file_path.endswith(f"-{video_id}-part-001.md")
+                ]
+                if candidates:
+                    path = sorted(candidates)[0]
+                    return ep_read(pack, path=path, reconstruct=reconstruct)
+                resolved_id = f"alex-hormozi-brain/youtube/{video_id}"
+            if path and (".." in Path(path).parts or path.startswith(("/", "\\"))):
+                return {"error": "path must be pack-relative"}
+            return ep_read(pack, path=path, id=resolved_id, reconstruct=reconstruct)
+
+        @mcp.tool(
+            annotations={
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            }
+        )
+        async def get_hormozi_skill(skill_name: str) -> dict:
+            """Return an executable Paperclip skill package entrypoint."""
+            safe_name = Path(skill_name).name
+            if safe_name != skill_name or safe_name in {"", ".", ".."}:
+                return {"error": "skill_name must be a package name"}
+            package_root = Path(pack.pack_dir).parents[1] / "skills" / "alex-hormozi" / safe_name
+            skill_file = package_root / "SKILL.md"
+            if not skill_file.is_file():
+                # The concise MCP atom still gives a useful error for callers
+                # that have not generated the executable mirror.
+                return ep_read(pack, path=f"agent-skills/{safe_name}.md")
+            raw_skill = skill_file.read_text(encoding="utf-8", errors="replace")
+            return {
+                "skill_name": safe_name,
+                "content": raw_skill,
+                "package_root": f"private-input/skills/alex-hormozi/{safe_name}/",
+                "files": sorted(str(path.relative_to(package_root)).replace("\\", "/") for path in package_root.rglob("*") if path.is_file()),
+                "execution_note": "Use this workflow with retrieved citations; do not represent the output as Alex Hormozi's current personal statement.",
+            }
+
+        @mcp.tool(
+            annotations={
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            }
+        )
+        async def get_brain_coverage(include_records: bool = False) -> dict:
+            """Report source coverage, rights status, and freshness without raw paths."""
+            import json
+            from pathlib import Path
+
+            report_path = Path(pack.pack_dir) / "meta" / "brain-coverage.json"
+            if not report_path.is_file():
+                return {"error": "coverage report is not present"}
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            response = {
+                "inventory_records": report.get("inventory_records", 0),
+                "derived_records": report.get("derived_records", 0),
+                "summary": report.get("summary", {}),
+                "transcripts": report.get("transcripts", {}),
+                "skills": {
+                    "status": report.get("skills", {}).get("status"),
+                    "package_count": len(report.get("skills", {}).get("packages", [])),
+                    "invalid": report.get("skills", {}).get("invalid", []),
+                },
+                "freshness": pack.freshness.model_dump() if pack.freshness else {},
+                "pending": {
+                    "restricted_sources": 2,
+                    "ocr_pages": report.get("extras", {}).get("ocr", {}).get("pages", 0),
+                    "audio": report.get("extras", {}).get("audio", []),
+                    "official_channel_enumeration": report.get("transcripts", {}).get("official_channel_enumeration"),
+                },
+            }
+            if include_records:
+                response["records"] = [
+                    {
+                        key: record.get(key)
+                        for key in ("record_id", "kind", "title", "format", "status", "rights_status", "source_url", "video_id", "duplicate_of", "pack_membership")
+                        if key in record
+                    }
+                    for record in report.get("records", [])
+                ]
+            return response
+
     # Register resources (always-tier files, overview, manifest, additional declared)
     register_resources(mcp, pack)
 
@@ -329,8 +501,9 @@ def build_app(
 
     auth = APIKeyAuth()
     for pack_config in config.packs:
-        if pack_config.api_keys:
-            auth.add_pack_keys(pack_config.slug, pack_config.api_keys)
+        # Register every configured pack so EP_MCP_KEY_<SLUG> works even when
+        # the secret is supplied only through the environment.
+        auth.add_pack_keys(pack_config.slug, pack_config.api_keys)
 
     transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
@@ -629,8 +802,28 @@ def build_app(
         Route("/search", search_post, methods=["POST"]),
     ]
 
+    def authenticated_mcp_app(app, pack_slug: str):
+        """Protect mounted MCP routes with the same per-pack API-key policy.
+
+        The direct REST search route already checks ``APIKeyAuth``.  The MCP
+        transport is mounted as a sub-application, so it needs an explicit
+        ASGI wrapper as well; otherwise a company-network deployment would
+        accidentally expose the tool surface while REST remained protected.
+        """
+
+        async def wrapped(scope, receive, send):
+            if scope.get("type") == "http":
+                headers = {key.decode("latin-1").lower(): value.decode("latin-1") for key, value in scope.get("headers", [])}
+                if not auth.authenticate(headers.get("authorization", ""), pack_slug):
+                    response = JSONResponse({"error": "Unauthorized"}, status_code=401)
+                    await response(scope, receive, send)
+                    return
+            await app(scope, receive, send)
+
+        return wrapped
+
     for slug, sm, mcp_app in session_managers:
-        routes.append(Mount(f"/packs/{slug}", app=mcp_app))
+        routes.append(Mount(f"/packs/{slug}", app=authenticated_mcp_app(mcp_app, slug)))
         logger.info("Mounted MCP endpoint: /packs/%s/mcp", slug)
 
     return Starlette(routes=routes, lifespan=lifespan)

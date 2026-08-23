@@ -186,6 +186,24 @@ def _create_embedding_provider(emb_config):
     if emb_config.provider == "gemini":
         from .embeddings.gemini import GeminiEmbeddingProvider
         return GeminiEmbeddingProvider(model=emb_config.model)
+    elif emb_config.provider == "openai":
+        from .embeddings.openai import OpenAIEmbeddingProvider
+        return OpenAIEmbeddingProvider(
+            model=emb_config.model or "text-embedding-3-small",
+            api_key=emb_config.api_key,
+            base_url=emb_config.base_url,
+            dimensions=emb_config.output_dimensionality,
+        )
+    elif emb_config.provider == "azure-openai":
+        from .embeddings.azure_openai import AzureOpenAIEmbeddingProvider
+        return AzureOpenAIEmbeddingProvider(
+            model=emb_config.model or "text-embedding-3-small",
+            azure_endpoint=emb_config.azure_endpoint,
+            api_key=emb_config.azure_api_key,
+            api_version=emb_config.azure_api_version,
+            azure_deployment=emb_config.azure_deployment,
+            output_dimensionality=emb_config.output_dimensionality,
+        )
     else:
         raise ValueError(f"Unsupported embedding provider: {emb_config.provider}")
 

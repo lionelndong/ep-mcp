@@ -113,6 +113,21 @@ embedding:
         assert config.embedding.provider == "azure_openai"
         assert config.embedding.azure_endpoint == "https://myresource.openai.azure.com"
 
+    def test_direct_openai_embedding(self, tmp_dir):
+        path = _write_config(tmp_dir, """
+packs:
+  - slug: "test"
+    path: "/tmp/test"
+embedding:
+  provider: "openai"
+  model: "text-embedding-3-small"
+  base_url: "https://api.openai.com/v1"
+""")
+        config = load_config(path)
+        assert config.embedding.provider == "openai"
+        assert config.embedding.model == "text-embedding-3-small"
+        assert config.embedding.base_url == "https://api.openai.com/v1"
+
     def test_missing_file(self):
         with pytest.raises(FileNotFoundError):
             load_config("/nonexistent/config.yaml")
