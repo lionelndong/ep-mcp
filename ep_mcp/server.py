@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -32,6 +34,32 @@ from .tools.ep_read import ep_read
 from .tools.ep_search import ep_search, log_query
 
 logger = logging.getLogger(__name__)
+
+
+class _TokenBucketRateLimiter:
+    """Small process-local token bucket used as a deployment safety valve."""
+
+    def __init__(self, requests_per_minute: int, burst: int):
+        self.rate = max(1, requests_per_minute) / 60.0
+        self.capacity = max(1, burst)
+        self._buckets: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> tuple[bool, int]:
+        now = time.monotonic()
+        with self._lock:
+            tokens, last = self._buckets.get(key, [float(self.capacity), now])
+            tokens = min(float(self.capacity), tokens + (now - last) * self.rate)
+            if tokens < 1.0:
+                retry_after = max(1, int((1.0 - tokens) / self.rate + 0.999))
+                self._buckets[key] = [tokens, now]
+                return False, retry_after
+            self._buckets[key] = [tokens - 1.0, now]
+            return True, 0
+
+
+def _loopback_host(host: str) -> bool:
+    return host in {"127.0.0.1", "localhost", "::1"}
 
 
 class PackInstance:
@@ -499,11 +527,34 @@ def build_app(
     """
     from mcp.server.transport_security import TransportSecuritySettings
 
-    auth = APIKeyAuth()
+    # Loopback development may intentionally omit a key. Any network bind is
+    # fail-closed when EP_MCP_KEY_<PACK> is missing.
+    auth = APIKeyAuth(allow_open=_loopback_host(config.host))
     for pack_config in config.packs:
         # Register every configured pack so EP_MCP_KEY_<SLUG> works even when
         # the secret is supplied only through the environment.
         auth.add_pack_keys(pack_config.slug, pack_config.api_keys)
+
+    limiter = None
+    if config.rate_limit.enabled:
+        limiter = _TokenBucketRateLimiter(
+            config.rate_limit.requests_per_minute,
+            config.rate_limit.burst,
+        )
+
+    def rate_limit_response(scope: dict, pack_slug: str) -> JSONResponse | None:
+        if limiter is None:
+            return None
+        client = scope.get("client")
+        client_host = client[0] if isinstance(client, (tuple, list)) and client else "unknown"
+        allowed, retry_after = limiter.allow(f"{pack_slug}:{client_host}")
+        if allowed:
+            return None
+        return JSONResponse(
+            {"error": "Rate limit exceeded", "pack": pack_slug},
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+        )
 
     transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
@@ -614,6 +665,9 @@ def build_app(
         auth_header = request.headers.get("Authorization", "")
         if not auth.authenticate(auth_header, slug):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        limited = rate_limit_response(request.scope, slug)
+        if limited is not None:
+            return limited
 
         try:
             engine = pack_instances[slug].engine
@@ -718,6 +772,9 @@ def build_app(
         auth_header = request.headers.get("Authorization", "")
         if not auth.authenticate(auth_header, slug):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        limited = rate_limit_response(request.scope, slug)
+        if limited is not None:
+            return limited
 
         # Dimension validation against the pack's configured embedding provider.
         if vector is not None:
@@ -817,6 +874,10 @@ def build_app(
                 if not auth.authenticate(headers.get("authorization", ""), pack_slug):
                     response = JSONResponse({"error": "Unauthorized"}, status_code=401)
                     await response(scope, receive, send)
+                    return
+                limited = rate_limit_response(scope, pack_slug)
+                if limited is not None:
+                    await limited(scope, receive, send)
                     return
             await app(scope, receive, send)
 

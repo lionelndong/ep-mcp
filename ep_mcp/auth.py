@@ -16,13 +16,16 @@ class APIKeyAuth:
     2. Environment variable: EP_MCP_KEY_{SLUG_UPPER}
     """
 
-    def __init__(self, pack_keys: dict[str, set[str]] | None = None):
+    def __init__(self, pack_keys: dict[str, set[str]] | None = None, *, allow_open: bool = True):
         """Initialize with pack → keys mapping.
 
         Args:
             pack_keys: {pack_slug: set_of_valid_keys}
         """
         self._pack_keys: dict[str, set[str]] = pack_keys or {}
+        # Loopback development can intentionally run without a key. Network
+        # deployments pass allow_open=False so a missing secret fails closed.
+        self.allow_open = allow_open
 
         # Also check environment variables
         for slug in list(self._pack_keys.keys()):
@@ -58,8 +61,10 @@ class APIKeyAuth:
         valid_keys = self._pack_keys.get(pack_slug, set())
 
         if not valid_keys:
-            # No keys configured = open access (for dev/testing)
-            logger.warning("No API keys configured for pack '%s' — allowing open access", pack_slug)
-            return True
+            if self.allow_open:
+                logger.warning("No API keys configured for pack '%s' — allowing open access", pack_slug)
+                return True
+            logger.error("No API keys configured for pack '%s' — denying access", pack_slug)
+            return False
 
         return key in valid_keys

@@ -176,6 +176,18 @@ class RetrievalConfig(BaseModel):
     requires_expansion_score: float = 0.30      # displayed score for appended atoms (below typical threshold)
 
 
+class RateLimitConfig(BaseModel):
+    """Process-local per-client request limits for network deployments.
+
+    This is a safety valve, not a replacement for the company's gateway. The
+    gateway should still enforce distributed quotas and identity-aware policy.
+    """
+
+    enabled: bool = False
+    requests_per_minute: int = 120
+    burst: int = 20
+
+
 class ServerConfig(BaseModel):
     """Top-level server configuration."""
 
@@ -185,6 +197,7 @@ class ServerConfig(BaseModel):
     packs: list[PackConfig] = Field(default_factory=list)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     # Dev mode: watch pack source directories for .md changes and trigger live reindex.
     # Requires: pip install watchdog. Not for production use.
@@ -276,5 +289,6 @@ def load_config(config_path: str | Path) -> ServerConfig:
         packs=packs,
         embedding=embedding,
         retrieval=retrieval,
+        rate_limit=RateLimitConfig(**server_raw.get("rate_limit", {})),
         reranker=reranker,
     )
