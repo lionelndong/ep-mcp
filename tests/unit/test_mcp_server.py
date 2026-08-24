@@ -315,6 +315,32 @@ async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack)
 
 
 @pytest.mark.asyncio
+async def test_hormozi_search_and_source_use_fallback_id_for_unattributed_file(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(
+            text="Generated overview without frontmatter ID.",
+            source_file="overview.md",
+            id=None,
+            content_hash="sha256:overview",
+            score=0.7,
+            type="reference",
+            title="Brain overview",
+        ),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        search = _payload(await client.call_tool("search_hormozi_brain", {"query": "overview"}))
+        row = search["results"][0]
+        assert row["source_id"] == "alex-hormozi-brain/file/overview.md"
+        source = _payload(await client.call_tool("get_hormozi_source", {"source_id": row["source_id"]}))
+    assert source["source_id"] == row["source_id"]
+    assert source["file_provenance"] == "overview.md"
+
+
+@pytest.mark.asyncio
 async def test_hormozi_search_expands_path_scopes_before_truncating(tiny_hormozi_pack):
     from mcp import Client
 

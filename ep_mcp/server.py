@@ -139,7 +139,16 @@ def _get_server_instructions(pack: Pack) -> str:
     return " ".join(parts)
 
 
-def _enrich_hormozi_source(payload: dict) -> dict:
+def _fallback_hormozi_source_id(pack_slug: str, path: str | None) -> str | None:
+    """Return a stable ID for generated files that lack frontmatter IDs."""
+
+    normalized = str(path or "").replace("\\", "/").lstrip("/")
+    if not normalized or ".." in Path(normalized).parts:
+        return None
+    return f"{pack_slug}/file/{normalized}"
+
+
+def _enrich_hormozi_source(payload: dict, pack_slug: str = "alex-hormozi-brain") -> dict:
     """Add stable citation fields when a complete Hormozi source is read."""
 
     if payload.get("error"):
@@ -186,7 +195,7 @@ def _enrich_hormozi_source(payload: dict) -> dict:
     elif chapter_match:
         payload["chapter"] = int(chapter_match.group(1))
         payload["locator"] = f"chapter {payload['chapter']}"
-    payload["source_id"] = payload.get("id")
+    payload["source_id"] = payload.get("id") or _fallback_hormozi_source_id(pack_slug, payload.get("path"))
     payload["content_type"] = payload.get("type")
     payload["file_provenance"] = payload.get("path")
     if payload.get("locator") and payload.get("path"):
@@ -453,7 +462,7 @@ def create_pack_mcp(
                     result["locator"] = line_locator
                 citation_locator = result.get("locator") or line_locator or f"chunk {result.get('chunk_index', 0)}"
                 citation = f"{result.get('source_file')} {citation_locator}"
-                result["source_id"] = result.get("id")
+                result["source_id"] = result.get("id") or _fallback_hormozi_source_id(slug, result.get("source_file"))
                 result["content_type"] = result.get("type")
                 result["file_provenance"] = result.get("source_file")
                 result["citation"] = citation
@@ -478,6 +487,10 @@ def create_pack_mcp(
         ) -> dict:
             """Read a complete cited source atom by ID or pack-relative path."""
             resolved_id = source_id
+            file_prefix = f"{slug}/file/"
+            if resolved_id and resolved_id.startswith(file_prefix):
+                path = resolved_id.removeprefix(file_prefix)
+                resolved_id = None
             if resolved_id and resolved_id.startswith("youtube-"):
                 video_id = resolved_id.removeprefix("youtube-")
                 prefix = "youtube/"
@@ -487,11 +500,11 @@ def create_pack_mcp(
                 ]
                 if candidates:
                     path = min(candidates)
-                    return _enrich_hormozi_source(ep_read(pack, path=path, reconstruct=reconstruct))
+                    return _enrich_hormozi_source(ep_read(pack, path=path, reconstruct=reconstruct), slug)
                 resolved_id = f"alex-hormozi-brain/youtube/{video_id}"
             if path and (".." in Path(path).parts or path.startswith(("/", "\\"))):
                 return {"error": "path must be pack-relative"}
-            return _enrich_hormozi_source(ep_read(pack, path=path, id=resolved_id, reconstruct=reconstruct))
+            return _enrich_hormozi_source(ep_read(pack, path=path, id=resolved_id, reconstruct=reconstruct), slug)
 
         @mcp.tool(
             annotations={
