@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from ep_mcp.pack.loader import load_pack
+from ep_mcp.retrieval.models import SearchResult
 from ep_mcp.server import create_pack_mcp
 
 
@@ -149,3 +150,40 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert "# Test skill" in skill["content"]
         search = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))
         assert search["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(
+            text=(
+                "Evidence boundary: transcript-derived source material.\n"
+                "- Video ID: `abc123`\n"
+                "- YouTube URL: https://youtube.com/watch?v=abc123\n"
+                "- Timestamp range: 12s-20s\n"
+            ),
+            source_file="youtube/example-abc123-part-001.md",
+            id="alex-hormozi-brain/youtube/abc123/part-001",
+            content_hash="sha256:test",
+            verified_at="2026-08-23",
+            score=0.91,
+            type="reference",
+            title="Example",
+            confidence="crawled",
+            line_range=(10, 18),
+        ),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))
+    row = payload["results"][0]
+    assert row["id"] == "alex-hormozi-brain/youtube/abc123/part-001"
+    assert row["title"] == "Example"
+    assert row["confidence"] == "crawled"
+    assert row["source_url"] == "https://youtube.com/watch?v=abc123"
+    assert row["video_id"] == "abc123"
+    assert row["locator"] == "12s-20s"
+    assert row["citation"] == "youtube/example-abc123-part-001.md lines 10-18"
