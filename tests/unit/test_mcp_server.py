@@ -125,7 +125,14 @@ context:
             },
             "skills": {"status": "ready", "packages": ["test-skill"], "invalid": []},
             "extras": {
-                "ocr": {"pages": 0},
+                "ocr": {
+                    "status": "indexed_ocr_recovered_manual_visual_qa_complete",
+                    "requested_pages": 442,
+                    "recovered_pages": 442,
+                    "visual_qa_status": "manual_review_complete",
+                    "manual_review_pages": 340,
+                    "manual_review_decision_counts": {"accept_ocr": 285, "graphic_or_blank": 55},
+                },
                 "audio": [{"path": r"C:\\private\\audio.mp3", "status": "metadata_ready_pending_transcription"}],
                 "containers": {
                     "status": "complete",
@@ -159,6 +166,10 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         coverage = _payload(await client.call_tool("get_brain_coverage", {}))
         assert coverage["inventory_records"] == 1
         assert coverage["containers"]["source_count"] == 3
+        assert coverage["ocr"]["requested_pages"] == 442
+        assert coverage["ocr"]["recovered_pages"] == 442
+        assert coverage["pending"]["ocr_pages"] == 0
+        assert coverage["pending"]["ocr_manual_review_pages"] == 0
         assert coverage["pending"]["audio"][0]["source_id"] == "derived-audio-audio"
         assert coverage["pending"]["audio"][0]["content_type"] == "audio"
         serialized_coverage = json.dumps(coverage)
@@ -167,6 +178,11 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert '"path"' not in serialized_coverage
         skill = _payload(await client.call_tool("get_hormozi_skill", {"skill_name": "test-skill"}))
         assert "# Test skill" in skill["content"]
+        assert skill["source_id"] == "alex-hormozi-brain/agent-skills/test-skill"
+        assert skill["content_type"] == "workflow"
+        assert skill["file_provenance"] == "agent-skills/test-skill.md"
+        assert "package_root" not in skill
+        assert "C:\\" not in json.dumps(skill)
         search = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))
         assert search["results"] == []
 

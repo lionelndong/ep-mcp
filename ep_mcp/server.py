@@ -407,10 +407,15 @@ def create_pack_mcp(
                 # that have not generated the executable mirror.
                 return ep_read(pack, path=f"agent-skills/{safe_name}.md")
             raw_skill = skill_file.read_text(encoding="utf-8", errors="replace")
+            skill_source_id = f"{pack.slug}/agent-skills/{safe_name}"
             return {
                 "skill_name": safe_name,
+                "source_id": skill_source_id,
+                "title": safe_name,
+                "content_type": "workflow",
+                "confidence": "curated",
+                "file_provenance": f"agent-skills/{safe_name}.md",
                 "content": raw_skill,
-                "package_root": f"private-input/skills/alex-hormozi/{safe_name}/",
                 "files": sorted(str(path.relative_to(package_root)).replace("\\", "/") for path in package_root.rglob("*") if path.is_file()),
                 "execution_note": "Use this workflow with retrieved citations; do not represent the output as Alex Hormozi's current personal statement.",
             }
@@ -443,6 +448,15 @@ def create_pack_mcp(
                 if key in transcript_report
             }
             container_report = report.get("extras", {}).get("containers", {})
+            ocr_report = report.get("extras", {}).get("ocr", {})
+            safe_ocr = {
+                key: ocr_report.get(key)
+                for key in (
+                    "status", "requested_pages", "recovered_pages", "visual_qa_status",
+                    "manual_review_pages", "manual_review_decision_counts",
+                )
+                if key in ocr_report
+            }
             safe_containers = {
                 "status": container_report.get("status"),
                 "source_count": container_report.get("source_count", 0),
@@ -496,10 +510,25 @@ def create_pack_mcp(
                     "invalid": report.get("skills", {}).get("invalid", []),
                 },
                 "containers": safe_containers,
+                "ocr": safe_ocr,
                 "freshness": pack.freshness.model_dump() if pack.freshness else {},
                 "pending": {
-                    "restricted_sources": 2,
-                    "ocr_pages": report.get("extras", {}).get("ocr", {}).get("pages", 0),
+                    "restricted_sources": sum(
+                        1
+                        for record in report.get("records", [])
+                        if isinstance(record, dict)
+                        and record.get("status") == "quarantined_restricted_authorization_required"
+                    ),
+                    "ocr_pages": max(
+                        int(ocr_report.get("requested_pages", 0) or 0)
+                        - int(ocr_report.get("recovered_pages", 0) or 0),
+                        0,
+                    ),
+                    "ocr_manual_review_pages": (
+                        0
+                        if ocr_report.get("visual_qa_status") == "manual_review_complete"
+                        else int(ocr_report.get("manual_review_pages", 0) or 0)
+                    ),
                     "audio": safe_audio,
                     "official_channel_enumeration": report.get("transcripts", {}).get("official_channel_enumeration"),
                 },
