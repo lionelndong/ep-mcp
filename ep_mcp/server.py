@@ -605,6 +605,12 @@ def create_pack_mcp(
                     if isinstance(item, dict)
                 ],
             }
+            book_to_skills = report.get("extras", {}).get("book_to_skills", {})
+            safe_book_to_skills = {
+                key: book_to_skills.get(key)
+                for key in ("status", "source_file_count", "matched_hash_count", "unmatched_count", "duplicate_count")
+                if key in book_to_skills
+            }
             raw_coverage = report.get("coverage_categories", {})
             raw_categories = raw_coverage.get("categories", {}) if isinstance(raw_coverage, dict) else {}
             raw_missing = raw_coverage.get("missing", {}) if isinstance(raw_coverage, dict) else {}
@@ -680,6 +686,7 @@ def create_pack_mcp(
                     "invalid": report.get("skills", {}).get("invalid", []),
                 },
                 "containers": safe_containers,
+                "book_to_skills": safe_book_to_skills,
                 "ocr": safe_ocr,
                 "coverage_categories": safe_coverage,
                 "restricted": safe_restricted,
