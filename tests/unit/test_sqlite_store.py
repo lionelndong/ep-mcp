@@ -173,6 +173,11 @@ class TestSQLiteStore:
         # Different model = no cache hit
         assert store.get_cached_embedding("hash1", "openai/test") is None
 
+    def test_embedding_cache_rejects_wrong_dimension(self, store):
+        store.cache_embedding("hash-dim", "openai/test", [0.1, 0.2, 0.3, 0.4])
+        assert store.get_cached_embedding("hash-dim", "openai/test", expected_dimension=4) is not None
+        assert store.get_cached_embedding("hash-dim", "openai/test", expected_dimension=2) is None
+
     def test_invalidate_cache(self, store):
         store.cache_embedding("h1", "model-a", [0.1, 0.2, 0.3, 0.4])
         store.cache_embedding("h2", "model-a", [0.5, 0.6, 0.7, 0.8])

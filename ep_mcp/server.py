@@ -475,6 +475,32 @@ def create_pack_mcp(
                     if isinstance(item, dict)
                 ],
             }
+            raw_coverage = report.get("coverage_categories", {})
+            raw_categories = raw_coverage.get("categories", {}) if isinstance(raw_coverage, dict) else {}
+            raw_missing = raw_coverage.get("missing", {}) if isinstance(raw_coverage, dict) else {}
+            safe_coverage = {
+                "categories": {
+                    key: int(raw_categories.get(key, 0) or 0)
+                    for key in ("included", "duplicate", "incomplete", "unsupported", "quarantined", "missing")
+                },
+                "missing": {
+                    "inventory_records": len(raw_missing.get("inventory_records", []) or []),
+                    "official_captionless_videos": [
+                        {
+                            key: item.get(key)
+                            for key in ("video_id", "title", "status")
+                            if key in item
+                        }
+                        for item in (raw_missing.get("official_captionless_videos", []) or [])
+                        if isinstance(item, dict)
+                    ],
+                    "audio_pending_transcription": [
+                        {"status": item.get("status")}
+                        for item in (raw_missing.get("audio_pending_transcription", []) or [])
+                        if isinstance(item, dict)
+                    ],
+                },
+            }
             audio_records = {
                 str(record.get("title", "")): record
                 for record in report.get("records", [])
@@ -511,6 +537,7 @@ def create_pack_mcp(
                 },
                 "containers": safe_containers,
                 "ocr": safe_ocr,
+                "coverage_categories": safe_coverage,
                 "freshness": pack.freshness.model_dump() if pack.freshness else {},
                 "pending": {
                     "restricted_sources": sum(

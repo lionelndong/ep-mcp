@@ -119,6 +119,29 @@ context:
             "inventory_records": 1,
             "derived_records": 1,
             "summary": {"indexed_evidence": 1},
+            "coverage_categories": {
+                "categories": {
+                    "included": 1,
+                    "duplicate": 0,
+                    "incomplete": 2,
+                    "unsupported": 0,
+                    "quarantined": 0,
+                    "missing": 0,
+                },
+                "missing": {
+                    "inventory_records": [],
+                    "official_captionless_videos": [{
+                        "video_id": "captionless",
+                        "title": "Captionless",
+                        "status": "caption_unavailable_pending_openai_transcription",
+                        "channel_url": "https://youtube.com/@AlexHormozi",
+                    }],
+                    "audio_pending_transcription": [{
+                        "path": r"C:\private\audio.mp3",
+                        "status": "metadata_ready_pending_transcription",
+                    }],
+                },
+            },
             "transcripts": {
                 "unique_videos": 1,
                 "source_files": [r"C:\\private\\transcripts.txt"],
@@ -170,6 +193,9 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert coverage["ocr"]["recovered_pages"] == 442
         assert coverage["pending"]["ocr_pages"] == 0
         assert coverage["pending"]["ocr_manual_review_pages"] == 0
+        assert coverage["coverage_categories"]["categories"]["included"] == 1
+        assert coverage["coverage_categories"]["missing"]["official_captionless_videos"][0]["video_id"] == "captionless"
+        assert coverage["coverage_categories"]["missing"]["audio_pending_transcription"] == [{"status": "metadata_ready_pending_transcription"}]
         assert coverage["pending"]["audio"][0]["source_id"] == "derived-audio-audio"
         assert coverage["pending"]["audio"][0]["content_type"] == "audio"
         serialized_coverage = json.dumps(coverage)

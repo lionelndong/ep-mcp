@@ -57,22 +57,30 @@ class IndexManager:
         current_model = self.provider.model_name
 
         stored_features = self.store.get_meta("index_features")
+        stored_dimension = self.store.get_meta("embedding_dimension")
         # None + existing chunks = pre-0.5 index that must rebuild for prefixes/nav filter.
         features_changed = stored_features != INDEX_FEATURES and (
             stored_features is not None or self.store.chunk_count() > 0
         )
         model_changed = bool(stored_model and stored_model != current_model)
+        dimension_changed = (
+            bool(stored_dimension and stored_dimension != str(self.provider.dimension))
+            or (stored_dimension is None and self.store.chunk_count() > 0)
+        )
 
-        if model_changed or features_changed:
+        if model_changed or dimension_changed or features_changed:
             reason = (
                 f"embedding model {stored_model} → {current_model}"
                 if model_changed
+                else f"embedding dimension {stored_dimension} → {self.provider.dimension}"
+                if dimension_changed
                 else f"index features {stored_features} → {INDEX_FEATURES}"
             )
             logger.info("Full rebuild required (%s)", reason)
             stats.full_rebuild = True
-            if model_changed:
-                self.store.invalidate_cache_for_model(stored_model)
+            if model_changed or dimension_changed:
+                self.store.recreate_vector_index(self.provider.dimension)
+                self.store.invalidate_cache_for_model(stored_model or current_model)
             for file_path in self.store.get_indexed_files():
                 self.store.delete_file_chunks(file_path)
             self.store.commit()
@@ -174,7 +182,11 @@ class IndexManager:
             index_text = chunk.text_for_index()
             chunk_hash = hashlib.sha256(index_text.encode("utf-8")).hexdigest()
 
-            cached = self.store.get_cached_embedding(chunk_hash, self.provider.model_name)
+            cached = self.store.get_cached_embedding(
+                chunk_hash,
+                self.provider.model_name,
+                expected_dimension=self.provider.dimension,
+            )
             if cached:
                 chunk_embed_map.append((i, cached))
                 stats.cache_hits += 1

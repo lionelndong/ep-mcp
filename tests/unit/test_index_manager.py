@@ -9,8 +9,9 @@ from ep_mcp.pack.loader import load_pack
 
 
 class FakeProvider(EmbeddingProvider):
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, dimension: int = 4):
         self._model_name = model_name
+        self._dimension = dimension
         self.calls: list[list[str]] = []
 
     @property
@@ -19,11 +20,11 @@ class FakeProvider(EmbeddingProvider):
 
     @property
     def dimension(self) -> int:
-        return 4
+        return self._dimension
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(list(texts))
-        return [[float(index), 1.0, 0.0, 0.0] for index, _ in enumerate(texts)]
+        return [[float(index)] + [0.0] * (self.dimension - 1) for index, _ in enumerate(texts)]
 
 
 def make_pack(root: Path) -> Path:
@@ -72,5 +73,26 @@ async def test_index_manager_incremental_and_model_rebuild(tmp_path):
         assert rebuilt.new_files == 2
         assert len(provider.calls) > first_call_count
         assert store.get_meta("embedding_model") == "openai/test-model-b"
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_index_manager_rebuilds_vector_table_when_dimension_changes(tmp_path):
+    pack = load_pack(make_pack(tmp_path / "pack"))
+    store = SQLiteStore(str(tmp_path / "index.db"), embedding_dimension=4)
+    store.open()
+    try:
+        first = await IndexManager(pack, store, FakeProvider("openai/test-model", dimension=4)).build_index()
+        assert first.full_rebuild is False
+
+        provider = FakeProvider("openai/test-model", dimension=2)
+        rebuilt = await IndexManager(pack, store, provider).build_index()
+
+        assert rebuilt.full_rebuild is True
+        assert rebuilt.new_files == 2
+        assert store.embedding_dimension == 2
+        assert store.get_meta("embedding_dimension") == "2"
+        assert store.vector_search([1.0, 0.0], limit=1)
     finally:
         store.close()

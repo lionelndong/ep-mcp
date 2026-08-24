@@ -111,9 +111,18 @@ class SQLiteStore:
         except sqlite3.OperationalError:
             pass  # Already exists
 
-        # sqlite-vec virtual table
+        self._create_vector_table()
+
+        c.commit()
+
+        self._migrate_schema()
+        self._install_fts_triggers()
+
+    def _create_vector_table(self) -> None:
+        """Create the sqlite-vec table for the configured dimension if absent."""
+
         try:
-            c.execute(f"""
+            self.conn.execute(f"""
                 CREATE VIRTUAL TABLE chunks_vec USING vec0(
                     chunk_id INTEGER PRIMARY KEY,
                     embedding FLOAT[{self.embedding_dimension}]
@@ -122,10 +131,20 @@ class SQLiteStore:
         except sqlite3.OperationalError:
             pass  # Already exists
 
-        c.commit()
+    def recreate_vector_index(self, embedding_dimension: int) -> None:
+        """Replace the vector table when a provider dimension changes.
 
-        self._migrate_schema()
-        self._install_fts_triggers()
+        sqlite-vec fixes the dimension in the virtual-table declaration.  A
+        normal row rebuild cannot change it, so the old table must be dropped
+        before the index manager re-embeds the pack.
+        """
+
+        if embedding_dimension <= 0:
+            raise ValueError("embedding_dimension must be positive")
+        self.embedding_dimension = embedding_dimension
+        self.conn.execute("DROP TABLE IF EXISTS chunks_vec")
+        self._create_vector_table()
+        self.conn.commit()
 
     def _install_fts_triggers(self) -> None:
         """(Re)install FTS sync triggers that prefer indexed_content when set."""
@@ -381,7 +400,10 @@ class SQLiteStore:
     # ── Embedding cache ──
 
     def get_cached_embedding(
-        self, content_hash: str, model_name: str
+        self,
+        content_hash: str,
+        model_name: str,
+        expected_dimension: int | None = None,
     ) -> list[float] | None:
         """Get a cached embedding by content hash and model."""
         row = self.conn.execute(
@@ -390,7 +412,15 @@ class SQLiteStore:
         ).fetchone()
         if not row:
             return None
-        return _deserialize_f32(row["embedding"])
+        embedding = _deserialize_f32(row["embedding"])
+        if expected_dimension is not None and len(embedding) != expected_dimension:
+            logger.info(
+                "Ignoring cached embedding with dimension %d; expected %d",
+                len(embedding),
+                expected_dimension,
+            )
+            return None
+        return embedding
 
     def cache_embedding(
         self, content_hash: str, model_name: str, embedding: list[float]
