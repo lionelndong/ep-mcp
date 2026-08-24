@@ -196,7 +196,9 @@ def _enrich_hormozi_source(payload: dict, pack_slug: str = "alex-hormozi-brain")
         payload["chapter"] = int(chapter_match.group(1))
         payload["locator"] = f"chapter {payload['chapter']}"
     payload["source_id"] = payload.get("id") or _fallback_hormozi_source_id(pack_slug, payload.get("path"))
-    payload["content_type"] = payload.get("type")
+    payload["title"] = payload.get("title") or payload.get("path")
+    payload["content_type"] = payload.get("type") or "untyped"
+    payload["confidence"] = payload.get("confidence") or "ungraded"
     payload["file_provenance"] = payload.get("path")
     if payload.get("locator") and payload.get("path"):
         payload["citation"] = f"{payload['path']} {payload['locator']}"
@@ -463,7 +465,9 @@ def create_pack_mcp(
                 citation_locator = result.get("locator") or line_locator or f"chunk {result.get('chunk_index', 0)}"
                 citation = f"{result.get('source_file')} {citation_locator}"
                 result["source_id"] = result.get("id") or _fallback_hormozi_source_id(slug, result.get("source_file"))
-                result["content_type"] = result.get("type")
+                result["title"] = result.get("title") or result.get("source_file")
+                result["content_type"] = result.get("type") or "untyped"
+                result["confidence"] = result.get("confidence") or "ungraded"
                 result["file_provenance"] = result.get("source_file")
                 result["citation"] = citation
                 result["source_scope"] = source_scope

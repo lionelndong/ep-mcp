@@ -326,7 +326,7 @@ async def test_hormozi_search_and_source_use_fallback_id_for_unattributed_file(t
             id=None,
             content_hash="sha256:overview",
             score=0.7,
-            type="reference",
+            type=None,
             title="Brain overview",
         ),
     ]
@@ -335,9 +335,13 @@ async def test_hormozi_search_and_source_use_fallback_id_for_unattributed_file(t
         search = _payload(await client.call_tool("search_hormozi_brain", {"query": "overview"}))
         row = search["results"][0]
         assert row["source_id"] == "alex-hormozi-brain/file/overview.md"
+        assert row["content_type"] == "untyped"
+        assert row["confidence"] == "ungraded"
         source = _payload(await client.call_tool("get_hormozi_source", {"source_id": row["source_id"]}))
     assert source["source_id"] == row["source_id"]
     assert source["file_provenance"] == "overview.md"
+    assert source["content_type"] == "untyped"
+    assert source["confidence"] == "ungraded"
 
 
 @pytest.mark.asyncio
