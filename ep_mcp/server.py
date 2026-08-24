@@ -342,21 +342,32 @@ def create_pack_mcp(
                 results = results[:max_results]
             import re
             for result in results:
-                url_match = re.search(r"YouTube URL:\s*(https?://\S+)", str(result.get("text", "")))
-                video_match = re.search(r"Video ID:\s*`([^`]+)`", str(result.get("text", "")))
-                timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", str(result.get("text", "")))
+                result_text = str(result.get("text", ""))
+                url_match = re.search(r"YouTube URL:\s*(https?://\S+)", result_text)
+                video_match = re.search(r"Video ID:\s*`([^`]+)`", result_text)
+                timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", result_text)
+                page_match = re.search(r"(?:Source )?Page:\s*([0-9]+)", result_text, re.IGNORECASE)
+                chapter_match = re.search(r"(?:EPUB )?chapter\s+([0-9]+)", f"{result.get('title', '')} {result_text}", re.IGNORECASE)
                 if url_match:
                     result["source_url"] = url_match.group(1).rstrip("`),")
                 if video_match:
                     result["video_id"] = video_match.group(1)
                 if timestamp_match:
-                    result["locator"] = timestamp_match.group(1).strip()
+                    result["timestamp"] = timestamp_match.group(1).strip()
+                    result["locator"] = f"timestamp {result['timestamp']}"
+                elif page_match:
+                    result["page"] = int(page_match.group(1))
+                    result["locator"] = f"page {result['page']}"
+                elif chapter_match:
+                    result["chapter"] = int(chapter_match.group(1))
+                    result["locator"] = f"chapter {result['chapter']}"
             for result in results:
                 locator = result.get("line_range")
-                if locator:
-                    citation = f"{result.get('source_file')} lines {locator[0]}-{locator[1]}"
-                else:
-                    citation = str(result.get("source_file"))
+                line_locator = f"lines {locator[0]}-{locator[1]}" if locator else None
+                if line_locator and not result.get("locator"):
+                    result["locator"] = line_locator
+                citation_locator = result.get("locator") or line_locator or f"chunk {result.get('chunk_index', 0)}"
+                citation = f"{result.get('source_file')} {citation_locator}"
                 result["source_id"] = result.get("id")
                 result["content_type"] = result.get("type")
                 result["file_provenance"] = result.get("source_file")

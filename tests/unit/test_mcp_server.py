@@ -249,8 +249,9 @@ async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack)
     assert row["confidence"] == "crawled"
     assert row["source_url"] == "https://youtube.com/watch?v=abc123"
     assert row["video_id"] == "abc123"
-    assert row["locator"] == "12s-20s"
-    assert row["citation"] == "youtube/example-abc123-part-001.md lines 10-18"
+    assert row["timestamp"] == "12s-20s"
+    assert row["locator"] == "timestamp 12s-20s"
+    assert row["citation"] == "youtube/example-abc123-part-001.md timestamp 12s-20s"
 
 
 @pytest.mark.asyncio
@@ -272,3 +273,30 @@ async def test_hormozi_search_expands_path_scopes_before_truncating(tiny_hormozi
     assert [row["source_file"] for row in payload["results"]] == ["youtube/b.md"]
     request = engine.search.await_args.args[0]
     assert request.max_results == 4
+
+
+@pytest.mark.asyncio
+async def test_hormozi_search_normalizes_page_locator(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(
+            text="- Page: 17\nPricing guidance",
+            source_file="ocr/src-example-page-0017.md",
+            id="alex-hormozi-brain/ocr/src-example/page-0017",
+            content_hash="sha256:page",
+            score=0.82,
+            type="reference",
+            title="Pricing — OCR page 17",
+            confidence="manually_transcribed",
+        ),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("search_hormozi_brain", {"query": "pricing"}))
+    row = payload["results"][0]
+    assert row["page"] == 17
+    assert row["locator"] == "page 17"
+    assert row["citation"] == "ocr/src-example-page-0017.md page 17"
+    assert row["confidence"] == "manually_transcribed"
