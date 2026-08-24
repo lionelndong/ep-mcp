@@ -10,6 +10,8 @@ from pathlib import Path
 
 import sqlite_vec
 
+from ..retrieval.stopwords import STOPWORDS
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +65,7 @@ class SQLiteStore:
     def _create_schema(self) -> None:
         """Create tables if they don't exist."""
         c = self.conn
-        c.executescript(f"""
+        c.executescript("""
             -- Content chunks
             CREATE TABLE IF NOT EXISTS chunks (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -479,33 +481,6 @@ import re as _re
 # FTS5 special characters that need escaping
 _FTS5_SPECIAL = _re.compile(r'[^\w\s]', _re.UNICODE)
 
-# English stopwords to strip from FTS5 queries.
-# These words break AND-logic by requiring literal matches of non-content terms.
-_STOPWORDS = frozenset({
-    # Question / auxiliary words
-    "what", "which", "how", "why", "when", "where", "who", "whom", "whose",
-    "does", "do", "did", "is", "are", "was", "were", "be", "been", "being",
-    "has", "have", "had", "will", "would", "could", "should", "can", "may",
-    "might", "shall", "must", "need", "dare", "used",
-    # Articles / determiners
-    "a", "an", "the", "this", "that", "these", "those", "my", "your", "its",
-    "our", "their", "his", "her", "some", "any", "all", "both", "each",
-    "every", "few", "more", "most", "other", "such", "no", "not", "only",
-    "same", "so", "than", "too", "very",
-    # Prepositions / conjunctions
-    "in", "on", "at", "by", "for", "with", "about", "against", "between",
-    "into", "through", "during", "before", "after", "above", "below", "from",
-    "up", "down", "out", "off", "over", "under", "again", "then", "once",
-    "of", "to", "as", "if", "or", "and", "but", "nor", "yet", "while",
-    "although", "because", "since", "unless", "until", "whether",
-    # Common filler
-    "i", "me", "we", "us", "you", "he", "she", "they", "them", "it",
-    "get", "use", "make", "tell", "know", "want", "like", "just",
-    "also", "back", "even", "still", "way", "well", "new", "old",
-    "please", "help", "show", "give", "look", "see",
-})
-
-
 # Cap total tokens considered for K-of-N combinatorics.  C(6,4)=15 clauses is
 # already generous; beyond this the query string grows quadratically.
 _MAX_BM25_TOKENS = 6
@@ -542,7 +517,6 @@ def _sanitize_fts5_query(
     filtering leaves nothing behind.  Caps total tokens at ``_MAX_BM25_TOKENS``
     to avoid combinatorial blowup in the query string.
     """
-    import math
     from itertools import combinations
 
     # Remove special characters
@@ -552,7 +526,7 @@ def _sanitize_fts5_query(
     # Filter: drop stopwords and very short tokens
     content_tokens = [
         t for t in raw_tokens
-        if len(t) >= 3 and t.lower() not in _STOPWORDS
+        if len(t) >= 3 and t.lower() not in STOPWORDS
     ]
     # Fallback: if everything was filtered, take the 3 longest original tokens
     if not content_tokens:

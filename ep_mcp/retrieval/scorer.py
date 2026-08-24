@@ -8,6 +8,8 @@ import math
 
 import numpy as np
 
+from .stopwords import STOPWORDS
+
 logger = logging.getLogger(__name__)
 
 
@@ -347,7 +349,7 @@ def score_bm25_fallback(
     raw_tokens = re.sub(r'[^\w\s]', ' ', query).lower().split()
     query_tokens = [
         t for t in raw_tokens
-        if len(t) >= 3 and t not in _STOPWORDS
+        if len(t) >= 3 and t not in STOPWORDS
     ] or raw_tokens[:5]  # fallback: keep first 5 tokens
 
     scores: dict[int, float] = {}
