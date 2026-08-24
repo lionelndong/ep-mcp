@@ -23,13 +23,9 @@ from ep_mcp.index.sqlite_store import SQLiteStore
 from ep_mcp.pack.loader import load_pack
 
 
-def pytest_addoption(parser):
-    parser.addoption("--pack", action="store", default=None, help="Path to ExpertPack")
-
-
 @pytest.fixture
 def pack_path(request):
-    path = request.config.getoption("--pack")
+    path = request.config.getoption("pack", default=None)
     if not path:
         pytest.skip("No --pack path provided")
     if not Path(path).is_dir():
