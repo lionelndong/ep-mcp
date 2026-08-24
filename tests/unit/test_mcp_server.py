@@ -119,12 +119,20 @@ context:
             "inventory_records": 1,
             "derived_records": 1,
             "summary": {"indexed_evidence": 1},
-            "transcripts": {"unique_videos": 1},
+            "transcripts": {
+                "unique_videos": 1,
+                "source_files": [r"C:\\private\\transcripts.txt"],
+            },
             "skills": {"status": "ready", "packages": ["test-skill"], "invalid": []},
             "extras": {
                 "ocr": {"pages": 0},
-                "audio": [],
-                "containers": {"status": "complete", "source_count": 3, "unique_knowledge_ingested": False},
+                "audio": [{"path": r"C:\\private\\audio.mp3", "status": "metadata_ready_pending_transcription"}],
+                "containers": {
+                    "status": "complete",
+                    "source_count": 3,
+                    "unique_knowledge_ingested": False,
+                    "sources": [{"source_id": "src-1", "path": r"C:\\private\\book.zip", "status": "inspected"}],
+                },
             },
             "records": [],
         }),
@@ -146,6 +154,10 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         coverage = _payload(await client.call_tool("get_brain_coverage", {}))
         assert coverage["inventory_records"] == 1
         assert coverage["containers"]["source_count"] == 3
+        serialized_coverage = json.dumps(coverage)
+        assert "C:\\private" not in serialized_coverage
+        assert "source_files" not in serialized_coverage
+        assert '"path"' not in serialized_coverage
         skill = _payload(await client.call_tool("get_hormozi_skill", {"skill_name": "test-skill"}))
         assert "# Test skill" in skill["content"]
         search = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))

@@ -428,22 +428,61 @@ def create_pack_mcp(
             if not report_path.is_file():
                 return {"error": "coverage report is not present"}
             report = json.loads(report_path.read_text(encoding="utf-8"))
+            transcript_report = report.get("transcripts", {})
+            safe_transcripts = {
+                key: transcript_report.get(key)
+                for key in (
+                    "sections_found", "unique_videos", "duplicate_sections_removed",
+                    "transcript_atoms", "official_channel_enumeration",
+                    "official_channel_video_count", "official_catalog_status_counts",
+                    "official_caption_videos",
+                )
+                if key in transcript_report
+            }
+            container_report = report.get("extras", {}).get("containers", {})
+            safe_containers = {
+                "status": container_report.get("status"),
+                "source_count": container_report.get("source_count", 0),
+                "unique_knowledge_ingested": container_report.get("unique_knowledge_ingested"),
+                "sources": [
+                    {
+                        key: item.get(key)
+                        for key in (
+                            "source_id", "type", "source_hash", "status", "member_count",
+                            "manifest_member_matches", "row_count", "unique_knowledge_ingested",
+                            "reason", "duplicate_group",
+                        )
+                        if key in item
+                    }
+                    for item in container_report.get("sources", [])
+                    if isinstance(item, dict)
+                ],
+            }
+            safe_audio = [
+                {
+                    key: item.get(key)
+                    for key in ("source_id", "status", "duration_seconds", "estimated_chunks", "model", "timestamped")
+                    if key in item
+                }
+                for item in report.get("extras", {}).get("audio", [])
+                if isinstance(item, dict)
+            ]
             response = {
                 "inventory_records": report.get("inventory_records", 0),
                 "derived_records": report.get("derived_records", 0),
                 "summary": report.get("summary", {}),
-                "transcripts": report.get("transcripts", {}),
+                "transcripts": safe_transcripts,
                 "skills": {
                     "status": report.get("skills", {}).get("status"),
                     "package_count": len(report.get("skills", {}).get("packages", [])),
                     "invalid": report.get("skills", {}).get("invalid", []),
                 },
-                "containers": report.get("extras", {}).get("containers", {}),
+                "containers": safe_containers,
                 "freshness": pack.freshness.model_dump() if pack.freshness else {},
                 "pending": {
                     "restricted_sources": 2,
                     "ocr_pages": report.get("extras", {}).get("ocr", {}).get("pages", 0),
-                    "audio": report.get("extras", {}).get("audio", []),
+                    "audio": safe_audio,
                     "official_channel_enumeration": report.get("transcripts", {}).get("official_channel_enumeration"),
                 },
             }
