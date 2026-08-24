@@ -200,6 +200,9 @@ async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack)
         payload = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))
     row = payload["results"][0]
     assert row["id"] == "alex-hormozi-brain/youtube/abc123/part-001"
+    assert row["source_id"] == row["id"]
+    assert row["content_type"] == "reference"
+    assert row["file_provenance"] == row["source_file"]
     assert row["title"] == "Example"
     assert row["confidence"] == "crawled"
     assert row["source_url"] == "https://youtube.com/watch?v=abc123"

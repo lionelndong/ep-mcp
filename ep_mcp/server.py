@@ -348,6 +348,9 @@ def create_pack_mcp(
                     citation = f"{result.get('source_file')} lines {locator[0]}-{locator[1]}"
                 else:
                     citation = str(result.get("source_file"))
+                result["source_id"] = result.get("id")
+                result["content_type"] = result.get("type")
+                result["file_provenance"] = result.get("source_file")
                 result["citation"] = citation
                 result["source_scope"] = source_scope
             return {
