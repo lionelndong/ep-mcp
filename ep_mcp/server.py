@@ -612,6 +612,13 @@ def create_pack_mcp(
                 "unique_work_count": int(restricted_report.get("unique_work_count", 0) or 0),
                 "ocr_requested": bool(restricted_report.get("ocr_requested", False)),
                 "ocr_atoms": int(restricted_report.get("ocr_atoms", 0) or 0),
+                "authorization_required": bool(restricted_report.get("authorization_required", False)),
+                "reason": restricted_report.get("reason"),
+                "source_ids": sorted(
+                    str(item.get("source_id"))
+                    for item in restricted_report.get("sources", [])
+                    if isinstance(item, dict) and item.get("source_id")
+                ),
             }
             audio_records = {
                 str(record.get("title", "")): record

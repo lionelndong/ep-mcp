@@ -161,6 +161,12 @@ context:
                 "unique_work_count": 0,
                 "ocr_requested": False,
                 "ocr_atoms": 0,
+                "authorization_required": True,
+                "reason": "authorization is required",
+                "sources": [
+                    {"source_id": "qsrc-b"},
+                    {"source_id": "qsrc-a"},
+                ],
             },
             "transcripts": {
                 "unique_videos": 1,
@@ -177,6 +183,18 @@ context:
                     "manual_review_decision_counts": {"accept_ocr": 285, "graphic_or_blank": 55},
                 },
                 "audio": [{"path": r"C:\\private\\audio.mp3", "status": "metadata_ready_pending_transcription"}],
+                "restricted": {
+                    "status": "pending_external_authorization",
+                    "unique_work_count": 0,
+                    "ocr_requested": False,
+                    "ocr_atoms": 0,
+                    "authorization_required": True,
+                    "reason": "authorization is required",
+                    "sources": [
+                        {"source_id": "qsrc-b"},
+                        {"source_id": "qsrc-a"},
+                    ],
+                },
                 "containers": {
                     "status": "complete",
                     "source_count": 3,
@@ -217,6 +235,8 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert coverage["coverage_categories"]["missing"]["official_captionless_videos"][0]["video_id"] == "captionless"
         assert coverage["coverage_categories"]["missing"]["audio_pending_transcription"] == [{"status": "metadata_ready_pending_transcription"}]
         assert coverage["restricted"]["status"] == "pending_external_authorization"
+        assert coverage["restricted"]["authorization_required"] is True
+        assert coverage["restricted"]["source_ids"] == ["qsrc-a", "qsrc-b"]
         assert coverage["pending"]["restricted_resolution_status"] == "pending_external_authorization"
         assert coverage["pending"]["audio"][0]["source_id"] == "derived-audio-audio"
         assert coverage["pending"]["audio"][0]["content_type"] == "audio"
