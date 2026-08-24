@@ -79,5 +79,17 @@ def test_openai_provider_requires_key(monkeypatch):
         OpenAIEmbeddingProvider()
 
 
+def test_openai_provider_requires_explicit_dimension_for_unknown_model(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    with pytest.raises(ValueError, match="Explicit dimensions"):
+        OpenAIEmbeddingProvider(model="future-embedding-model")
+
+
+def test_openai_provider_rejects_nonpositive_dimension(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    with pytest.raises(ValueError, match="dimensions must be positive"):
+        OpenAIEmbeddingProvider(model="text-embedding-3-small", dimensions=0)
+
+
 async def _completed_sleep():
     return None

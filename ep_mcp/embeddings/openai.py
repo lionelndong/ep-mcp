@@ -39,6 +39,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         max_parallel_batches: int = _MAX_PARALLEL_BATCHES,
         max_retries: int = 3,
     ) -> None:
+        if not model.strip():
+            raise ValueError("OpenAI embedding model must be non-empty")
+        if dimensions is not None and dimensions <= 0:
+            raise ValueError("OpenAI embedding dimensions must be positive")
+        if model not in _MODEL_DIMENSIONS and dimensions is None:
+            raise ValueError(
+                "Explicit dimensions are required for an unknown OpenAI embedding model"
+            )
         self._model = model
         self._dimensions = dimensions
         self._max_retries = max(1, max_retries)
@@ -60,7 +68,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     @property
     def dimension(self) -> int:
-        return self._dimensions or _MODEL_DIMENSIONS.get(self._model, 1536)
+        return self._dimensions or _MODEL_DIMENSIONS[self._model]
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
