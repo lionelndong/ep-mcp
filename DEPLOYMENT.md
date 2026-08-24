@@ -6,7 +6,7 @@ Practical guide for deploying and operating **ep-mcp** in production.
 
 - Python 3.12+
 - A valid ExpertPack directory (with `_graph.yaml` optional)
-- Gemini API key (or Azure OpenAI credentials)
+- Gemini, direct OpenAI, or Azure OpenAI credentials matching the configured provider
 - A server with systemd (for production)
 
 ## 2. Installation
@@ -55,6 +55,18 @@ embedding:
   azure_deployment: "my-deployment"  # defaults to model name if omitted
   output_dimensionality: null        # MRL shortening: null=full dim, e.g. 768=4× smaller
 ```
+
+To use the direct OpenAI API with local SQLite vectors and no local model:
+
+```yaml
+embedding:
+  provider: "openai"
+  model: "text-embedding-3-small"
+  # OPENAI_API_KEY is read from the environment or secret manager.
+```
+
+Set `OPENAI_API_KEY` only in the process environment or company secret manager;
+never commit it to `config.yaml`.
 
 ⚠️ **Embedding dimensions must match at index time.** Switching providers on an existing index requires a full reindex — `rm -rf <pack>/.ep-mcp/` then restart.
 

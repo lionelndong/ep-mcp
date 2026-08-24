@@ -75,8 +75,16 @@ packs:
       - "your-secret-key-here"
 
 embedding:
-  provider: "gemini"           # "gemini" (default) or "azure-openai"
+  provider: "gemini"           # "gemini" (default), "openai", or "azure-openai"
   model: "gemini-embedding-001"
+```
+
+For a direct OpenAI setup (no local model), use:
+
+```yaml
+embedding:
+  provider: "openai"
+  model: "text-embedding-3-small"
 ```
 
 For the full configuration reference — embedding providers, retrieval tuning (`mmr_lambda`, `min_score`, `default_max_results`, graph expansion, reranker, `requires:` expansion, etc.), production systemd setup, and deployment gotchas — see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
@@ -104,6 +112,7 @@ Only the key for your configured embedding provider is required.
 | Variable                  | Required | Description |
 |---------------------------|----------|-------------|
 | `GEMINI_API_KEY`          | If `embedding.provider: gemini` | Gemini embedding API key |
+| `OPENAI_API_KEY`          | If `embedding.provider: openai` | Direct OpenAI embedding API key |
 | `AZURE_OPENAI_ENDPOINT`   | If `embedding.provider: azure-openai` | Azure OpenAI resource endpoint |
 | `AZURE_OPENAI_API_KEY`    | If `embedding.provider: azure-openai` | Azure OpenAI API key |
 | `EP_MCP_KEY_{SLUG}`       | Optional | Per-pack API key override (uppercase slug, hyphens→underscores) |
