@@ -272,6 +272,22 @@ async def test_get_hormozi_source_returns_cited_locator(tiny_hormozi_pack):
     assert payload["citation_url"] == "https://youtube.com/watch?v=abc123&t=12s"
 
 
+def test_source_enrichment_normalizes_title_only_page_locator():
+    from ep_mcp.server import _enrich_hormozi_source
+
+    payload = _enrich_hormozi_source(
+        {
+            "title": "Pricing Playbook — pages 4-4",
+            "content": "Pricing guidance",
+            "id": "alex-hormozi-brain/evidence/pricing-pages-4-4",
+            "path": "evidence/pricing-pages-4-4.md",
+        }
+    )
+    assert payload["page"] == 4
+    assert payload["locator"] == "page 4"
+    assert payload["citation"] == "evidence/pricing-pages-4-4.md page 4"
+
+
 @pytest.mark.asyncio
 async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack):
     from mcp import Client
@@ -390,6 +406,32 @@ async def test_hormozi_search_normalizes_page_locator(tiny_hormozi_pack):
     assert row["locator"] == "page 17"
     assert row["citation"] == "ocr/src-example-page-0017.md page 17"
     assert row["confidence"] == "manually_transcribed"
+
+
+@pytest.mark.asyncio
+async def test_hormozi_search_normalizes_title_only_page_locator(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(
+            text="Pricing guidance without an inline page marker",
+            source_file="evidence/pricing-pages-17-17.md",
+            id="alex-hormozi-brain/evidence/pricing-pages-17-17",
+            content_hash="sha256:page-title",
+            score=0.82,
+            type="concept",
+            title="Pricing Playbook — pages 17-17",
+            confidence="crawled",
+        ),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("search_hormozi_brain", {"query": "pricing"}))
+    row = payload["results"][0]
+    assert row["page"] == 17
+    assert row["locator"] == "page 17"
+    assert row["citation"] == "evidence/pricing-pages-17-17.md page 17"
 
 
 @pytest.mark.asyncio

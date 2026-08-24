@@ -157,7 +157,11 @@ def _enrich_hormozi_source(payload: dict, pack_slug: str = "alex-hormozi-brain")
     source_url_match = re.search(r"YouTube URL:\s*(https?://\S+)", source_text)
     video_match = re.search(r"Video ID:\s*`([^`]+)`", source_text)
     timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", source_text)
-    page_match = re.search(r"(?:Source )?Page:\s*([0-9]+)", source_text, re.IGNORECASE)
+    page_match = re.search(
+        r"(?:\b(?:Source )?Page:\s*|\bpages?\s+)([0-9]+)",
+        f"{payload.get('title', '')} {source_text}",
+        re.IGNORECASE,
+    )
     chapter_match = re.search(
         r"(?:EPUB )?chapter\s+([0-9]+)",
         f"{payload.get('title', '')} {source_text}",
@@ -420,7 +424,11 @@ def create_pack_mcp(
                 url_match = re.search(r"YouTube URL:\s*(https?://\S+)", result_text)
                 video_match = re.search(r"Video ID:\s*`([^`]+)`", result_text)
                 timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", result_text)
-                page_match = re.search(r"(?:Source )?Page:\s*([0-9]+)", result_text, re.IGNORECASE)
+                page_match = re.search(
+                    r"(?:\b(?:Source )?Page:\s*|\bpages?\s+)([0-9]+)",
+                    f"{result.get('title', '')} {result_text}",
+                    re.IGNORECASE,
+                )
                 chapter_match = re.search(r"(?:EPUB )?chapter\s+([0-9]+)", f"{result.get('title', '')} {result_text}", re.IGNORECASE)
                 if url_match:
                     result["source_url"] = url_match.group(1).rstrip("`),")
