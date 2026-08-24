@@ -103,7 +103,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             except Exception as error:  # SDK raises several provider-specific types.
                 if attempt + 1 >= self._max_retries:
                     raise RuntimeError(
-                        f"OpenAI embedding failed after {self._max_retries} attempts: {error}"
+                        "OpenAI embedding failed after "
+                        f"{self._max_retries} attempts ({type(error).__name__})"
                     ) from error
                 wait = 2**attempt
                 logger.warning(
