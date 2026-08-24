@@ -134,7 +134,12 @@ context:
                     "sources": [{"source_id": "src-1", "path": r"C:\\private\\book.zip", "status": "inspected"}],
                 },
             },
-            "records": [],
+            "records": [{
+                "record_id": "derived-audio-audio",
+                "kind": "derived_audio",
+                "title": "audio",
+                "status": "metadata_ready_pending_transcription",
+            }],
         }),
         encoding="utf-8",
     )
@@ -154,6 +159,8 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         coverage = _payload(await client.call_tool("get_brain_coverage", {}))
         assert coverage["inventory_records"] == 1
         assert coverage["containers"]["source_count"] == 3
+        assert coverage["pending"]["audio"][0]["source_id"] == "derived-audio-audio"
+        assert coverage["pending"]["audio"][0]["content_type"] == "audio"
         serialized_coverage = json.dumps(coverage)
         assert "C:\\private" not in serialized_coverage
         assert "source_files" not in serialized_coverage

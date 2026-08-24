@@ -458,15 +458,30 @@ def create_pack_mcp(
                     if isinstance(item, dict)
                 ],
             }
-            safe_audio = [
-                {
-                    key: item.get(key)
-                    for key in ("source_id", "status", "duration_seconds", "estimated_chunks", "model", "timestamped")
-                    if key in item
-                }
-                for item in report.get("extras", {}).get("audio", [])
-                if isinstance(item, dict)
-            ]
+            audio_records = {
+                str(record.get("title", "")): record
+                for record in report.get("records", [])
+                if isinstance(record, dict) and record.get("kind") == "derived_audio"
+            }
+            safe_audio = []
+            for item in report.get("extras", {}).get("audio", []):
+                if not isinstance(item, dict):
+                    continue
+                raw_path = str(item.get("path", ""))
+                title = raw_path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                record = audio_records.get(title, {})
+                plan = item.get("transcription_plan", {})
+                metadata = item.get("metadata", {})
+                safe_audio.append({
+                    "source_id": item.get("source_id") or record.get("record_id"),
+                    "title": record.get("title") or title,
+                    "content_type": "audio",
+                    "status": item.get("status"),
+                    "duration_seconds": metadata.get("duration"),
+                    "estimated_chunks": plan.get("chunk_count"),
+                    "model": plan.get("model"),
+                    "timestamped": plan.get("timestamped_segments"),
+                })
             response = {
                 "inventory_records": report.get("inventory_records", 0),
                 "derived_records": report.get("derived_records", 0),
