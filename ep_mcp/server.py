@@ -37,6 +37,13 @@ from .tools.ep_search import ep_search, log_query
 logger = logging.getLogger(__name__)
 
 
+def _audio_timestamp(source_text: str) -> str | None:
+    """Return the first ``[HH:MM:SS]`` locator emitted by audio ingestion."""
+
+    match = re.search(r"\[(\d{1,2}:\d{2}:\d{2})\]", source_text)
+    return match.group(1) if match else None
+
+
 class _TokenBucketRateLimiter:
     """Small process-local token bucket used as a deployment safety valve."""
 
@@ -157,6 +164,7 @@ def _enrich_hormozi_source(payload: dict, pack_slug: str = "alex-hormozi-brain")
     source_url_match = re.search(r"YouTube URL:\s*(https?://\S+)", source_text)
     video_match = re.search(r"Video ID:\s*`([^`]+)`", source_text)
     timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", source_text)
+    audio_timestamp = _audio_timestamp(f"{payload.get('title', '')} {source_text}")
     page_match = re.search(
         r"(?:\b(?:Source )?Page:\s*|\bpages?\s+)([0-9]+)",
         f"{payload.get('title', '')} {source_text}",
@@ -199,6 +207,9 @@ def _enrich_hormozi_source(payload: dict, pack_slug: str = "alex-hormozi-brain")
     elif chapter_match:
         payload["chapter"] = int(chapter_match.group(1))
         payload["locator"] = f"chapter {payload['chapter']}"
+    elif audio_timestamp:
+        payload["timestamp"] = audio_timestamp
+        payload["locator"] = f"timestamp {audio_timestamp}"
     payload["source_id"] = payload.get("id") or _fallback_hormozi_source_id(pack_slug, payload.get("path"))
     payload["title"] = payload.get("title") or payload.get("path")
     payload["content_type"] = payload.get("type") or "untyped"
@@ -424,6 +435,7 @@ def create_pack_mcp(
                 url_match = re.search(r"YouTube URL:\s*(https?://\S+)", result_text)
                 video_match = re.search(r"Video ID:\s*`([^`]+)`", result_text)
                 timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", result_text)
+                audio_timestamp = _audio_timestamp(f"{result.get('title', '')} {result_text}")
                 page_match = re.search(
                     r"(?:\b(?:Source )?Page:\s*|\bpages?\s+)([0-9]+)",
                     f"{result.get('title', '')} {result_text}",
@@ -465,6 +477,9 @@ def create_pack_mcp(
                 elif chapter_match:
                     result["chapter"] = int(chapter_match.group(1))
                     result["locator"] = f"chapter {result['chapter']}"
+                elif audio_timestamp:
+                    result["timestamp"] = audio_timestamp
+                    result["locator"] = f"timestamp {audio_timestamp}"
             for result in results:
                 locator = result.get("line_range")
                 line_locator = f"lines {locator[0]}-{locator[1]}" if locator else None

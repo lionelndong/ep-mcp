@@ -291,6 +291,22 @@ def test_source_enrichment_normalizes_title_only_page_locator():
     assert payload["citation"] == "evidence/pricing-pages-4-4.md page 4"
 
 
+def test_source_enrichment_normalizes_audio_timestamp_locator():
+    from ep_mcp.server import _enrich_hormozi_source
+
+    payload = _enrich_hormozi_source(
+        {
+            "title": "Money Models audiobook",
+            "content": "[00:12:34] Increase the value of the offer.",
+            "id": "alex-hormozi-brain/audio/money-models/transcript",
+            "path": "audio/money-models-transcript.md",
+        }
+    )
+    assert payload["timestamp"] == "00:12:34"
+    assert payload["locator"] == "timestamp 00:12:34"
+    assert payload["citation"] == "audio/money-models-transcript.md timestamp 00:12:34"
+
+
 @pytest.mark.asyncio
 async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack):
     from mcp import Client
@@ -435,6 +451,32 @@ async def test_hormozi_search_normalizes_title_only_page_locator(tiny_hormozi_pa
     assert row["page"] == 17
     assert row["locator"] == "page 17"
     assert row["citation"] == "evidence/pricing-pages-17-17.md page 17"
+
+
+@pytest.mark.asyncio
+async def test_hormozi_search_normalizes_audio_timestamp_locator(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(
+            text="[00:12:34] Increase the value of the offer.",
+            source_file="audio/money-models-transcript.md",
+            id="alex-hormozi-brain/audio/money-models/transcript",
+            content_hash="sha256:audio",
+            score=0.82,
+            type="reference",
+            title="Money Models audiobook",
+            confidence="transcribed",
+        ),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("search_hormozi_brain", {"query": "pricing"}))
+    row = payload["results"][0]
+    assert row["timestamp"] == "00:12:34"
+    assert row["locator"] == "timestamp 00:12:34"
+    assert row["citation"] == "audio/money-models-transcript.md timestamp 00:12:34"
 
 
 @pytest.mark.asyncio
