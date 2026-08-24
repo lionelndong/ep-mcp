@@ -120,7 +120,11 @@ context:
             "summary": {"indexed_evidence": 1},
             "transcripts": {"unique_videos": 1},
             "skills": {"status": "ready", "packages": ["test-skill"], "invalid": []},
-            "extras": {"ocr": {"pages": 0}, "audio": []},
+            "extras": {
+                "ocr": {"pages": 0},
+                "audio": [],
+                "containers": {"status": "complete", "source_count": 3, "unique_knowledge_ingested": False},
+            },
             "records": [],
         }),
         encoding="utf-8",
@@ -140,6 +144,7 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert {"search_hormozi_brain", "get_hormozi_source", "get_hormozi_skill", "get_brain_coverage"} <= names
         coverage = _payload(await client.call_tool("get_brain_coverage", {}))
         assert coverage["inventory_records"] == 1
+        assert coverage["containers"]["source_count"] == 3
         skill = _payload(await client.call_tool("get_hormozi_skill", {"skill_name": "test-skill"}))
         assert "# Test skill" in skill["content"]
         search = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))

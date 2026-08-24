@@ -438,6 +438,7 @@ def create_pack_mcp(
                     "package_count": len(report.get("skills", {}).get("packages", [])),
                     "invalid": report.get("skills", {}).get("invalid", []),
                 },
+                "containers": report.get("extras", {}).get("containers", {}),
                 "freshness": pack.freshness.model_dump() if pack.freshness else {},
                 "pending": {
                     "restricted_sources": 2,
