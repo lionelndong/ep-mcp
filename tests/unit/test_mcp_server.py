@@ -85,6 +85,20 @@ def tiny_hormozi_pack(tmp_path: Path):
     (pack_dir / "agent-skills").mkdir(parents=True)
     (pack_dir / "meta").mkdir(parents=True)
     (pack_dir / "youtube").mkdir(parents=True)
+    (pack_dir / "youtube" / "example-abc123-part-001.md").write_text(
+        "---\n"
+        "title: Example\n"
+        "type: reference\n"
+        "pack: alex-hormozi-brain\n"
+        "id: alex-hormozi-brain/youtube/abc123/part-001\n"
+        "---\n"
+        "# Example\n\n"
+        "- Video ID: `abc123`\n"
+        "- YouTube URL: https://youtube.com/watch?v=abc123\n"
+        "- Timestamp range: 12s-20s\n\n"
+        "Transcript evidence.\n",
+        encoding="utf-8",
+    )
     (tmp_path / "skills" / "alex-hormozi" / "test-skill").mkdir(parents=True)
     (tmp_path / "skills" / "alex-hormozi" / "test-skill" / "SKILL.md").write_text(
         "---\nname: test-skill\ndescription: test\n---\n# Test skill\n",
@@ -219,6 +233,23 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert "C:\\" not in json.dumps(skill)
         search = _payload(await client.call_tool("search_hormozi_brain", {"query": "offers"}))
         assert search["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_hormozi_source_returns_cited_locator(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("get_hormozi_source", {
+            "source_id": "alex-hormozi-brain/youtube/abc123/part-001",
+        }))
+    assert payload["source_id"] == "alex-hormozi-brain/youtube/abc123/part-001"
+    assert payload["content_type"] == "reference"
+    assert payload["file_provenance"] == "youtube/example-abc123-part-001.md"
+    assert payload["locator"] == "timestamp 12s-20s"
+    assert payload["citation_url"] == "https://youtube.com/watch?v=abc123&t=12s"
 
 
 @pytest.mark.asyncio

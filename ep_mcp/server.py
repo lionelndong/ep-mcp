@@ -139,6 +139,61 @@ def _get_server_instructions(pack: Pack) -> str:
     return " ".join(parts)
 
 
+def _enrich_hormozi_source(payload: dict) -> dict:
+    """Add stable citation fields when a complete Hormozi source is read."""
+
+    if payload.get("error"):
+        return payload
+    source_text = str(payload.get("content", ""))
+    source_url_match = re.search(r"YouTube URL:\s*(https?://\S+)", source_text)
+    video_match = re.search(r"Video ID:\s*`([^`]+)`", source_text)
+    timestamp_match = re.search(r"Timestamp range:\s*([^\n]+)", source_text)
+    page_match = re.search(r"(?:Source )?Page:\s*([0-9]+)", source_text, re.IGNORECASE)
+    chapter_match = re.search(
+        r"(?:EPUB )?chapter\s+([0-9]+)",
+        f"{payload.get('title', '')} {source_text}",
+        re.IGNORECASE,
+    )
+    if source_url_match:
+        payload["source_url"] = source_url_match.group(1).rstrip("`),")
+    if video_match:
+        payload["video_id"] = video_match.group(1)
+    if timestamp_match:
+        timestamp = timestamp_match.group(1).strip()
+        payload["timestamp"] = timestamp
+        payload["locator"] = f"timestamp {timestamp}"
+        if payload.get("source_url"):
+            start = timestamp.split("-", 1)[0].strip()
+            seconds: int | None = None
+            seconds_match = re.fullmatch(r"(\d+(?:\.\d+)?)s", start)
+            clock_match = re.fullmatch(r"(?:(\d+):)?(\d{1,2}):(\d{2})", start)
+            if seconds_match:
+                seconds = max(0, int(float(seconds_match.group(1))))
+            elif clock_match:
+                hours = int(clock_match.group(1) or 0)
+                minutes = int(clock_match.group(2))
+                seconds = hours * 3600 + minutes * 60 + int(clock_match.group(3))
+            if seconds is not None:
+                parsed = urlsplit(payload["source_url"])
+                query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+                query["t"] = f"{seconds}s"
+                payload["citation_url"] = urlunsplit(
+                    (parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment)
+                )
+    elif page_match:
+        payload["page"] = int(page_match.group(1))
+        payload["locator"] = f"page {payload['page']}"
+    elif chapter_match:
+        payload["chapter"] = int(chapter_match.group(1))
+        payload["locator"] = f"chapter {payload['chapter']}"
+    payload["source_id"] = payload.get("id")
+    payload["content_type"] = payload.get("type")
+    payload["file_provenance"] = payload.get("path")
+    if payload.get("locator") and payload.get("path"):
+        payload["citation"] = f"{payload['path']} {payload['locator']}"
+    return payload
+
+
 def create_pack_mcp(
     slug: str,
     pack: Pack,
@@ -432,11 +487,11 @@ def create_pack_mcp(
                 ]
                 if candidates:
                     path = min(candidates)
-                    return ep_read(pack, path=path, reconstruct=reconstruct)
+                    return _enrich_hormozi_source(ep_read(pack, path=path, reconstruct=reconstruct))
                 resolved_id = f"alex-hormozi-brain/youtube/{video_id}"
             if path and (".." in Path(path).parts or path.startswith(("/", "\\"))):
                 return {"error": "path must be pack-relative"}
-            return ep_read(pack, path=path, id=resolved_id, reconstruct=reconstruct)
+            return _enrich_hormozi_source(ep_read(pack, path=path, id=resolved_id, reconstruct=reconstruct))
 
         @mcp.tool(
             annotations={
