@@ -521,6 +521,13 @@ def create_pack_mcp(
                     ],
                 },
             }
+            restricted_report = report.get("extras", {}).get("restricted", {})
+            safe_restricted = {
+                "status": restricted_report.get("status", "pending_external_authorization"),
+                "unique_work_count": int(restricted_report.get("unique_work_count", 0) or 0),
+                "ocr_requested": bool(restricted_report.get("ocr_requested", False)),
+                "ocr_atoms": int(restricted_report.get("ocr_atoms", 0) or 0),
+            }
             audio_records = {
                 str(record.get("title", "")): record
                 for record in report.get("records", [])
@@ -558,6 +565,7 @@ def create_pack_mcp(
                 "containers": safe_containers,
                 "ocr": safe_ocr,
                 "coverage_categories": safe_coverage,
+                "restricted": safe_restricted,
                 "freshness": pack.freshness.model_dump() if pack.freshness else {},
                 "pending": {
                     "restricted_sources": sum(
@@ -566,6 +574,7 @@ def create_pack_mcp(
                         if isinstance(record, dict)
                         and record.get("status") == "quarantined_restricted_authorization_required"
                     ),
+                    "restricted_resolution_status": safe_restricted["status"],
                     "ocr_pages": max(
                         int(ocr_report.get("requested_pages", 0) or 0)
                         - int(ocr_report.get("recovered_pages", 0) or 0),

@@ -142,6 +142,12 @@ context:
                     }],
                 },
             },
+            "restricted": {
+                "status": "pending_external_authorization",
+                "unique_work_count": 0,
+                "ocr_requested": False,
+                "ocr_atoms": 0,
+            },
             "transcripts": {
                 "unique_videos": 1,
                 "source_files": [r"C:\\private\\transcripts.txt"],
@@ -196,6 +202,8 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert coverage["coverage_categories"]["categories"]["included"] == 1
         assert coverage["coverage_categories"]["missing"]["official_captionless_videos"][0]["video_id"] == "captionless"
         assert coverage["coverage_categories"]["missing"]["audio_pending_transcription"] == [{"status": "metadata_ready_pending_transcription"}]
+        assert coverage["restricted"]["status"] == "pending_external_authorization"
+        assert coverage["pending"]["restricted_resolution_status"] == "pending_external_authorization"
         assert coverage["pending"]["audio"][0]["source_id"] == "derived-audio-audio"
         assert coverage["pending"]["audio"][0]["content_type"] == "audio"
         serialized_coverage = json.dumps(coverage)
