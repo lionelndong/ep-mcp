@@ -57,4 +57,6 @@ async def test_network_build_app_rejects_missing_pack_key(monkeypatch):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get("/search", params={"q": "offers", "pack": "alex-hormozi-brain"})
+        mcp_response = await client.get("/packs/alex-hormozi-brain/mcp")
     assert response.status_code == 401
+    assert mcp_response.status_code == 401
