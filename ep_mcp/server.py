@@ -671,6 +671,31 @@ def create_pack_mcp(
                 for record in report.get("records", [])
                 if isinstance(record, dict) and record.get("kind") == "derived_audio"
             }
+            raw_audio_estimate = report.get("extras", {}).get("audio_transcription_estimate", {})
+            safe_audio_estimate = {
+                key: raw_audio_estimate.get(key)
+                for key in (
+                    "status", "metadata_available", "total_duration_seconds",
+                    "total_estimated_audio_minutes", "total_estimated_chunks",
+                    "api_called", "media_uploaded", "media_retained",
+                    "requires_openai_api_key",
+                )
+                if key in raw_audio_estimate
+            }
+            safe_audio_estimate["sources"] = [
+                {
+                    key: item.get(key)
+                    for key in (
+                        "source_id", "status", "duration_seconds",
+                        "estimated_audio_minutes", "estimated_chunks", "model",
+                        "timestamped_segments", "api_called", "media_uploaded",
+                        "media_retained",
+                    )
+                    if key in item
+                }
+                for item in raw_audio_estimate.get("sources", [])
+                if isinstance(item, dict)
+            ]
             safe_audio = []
             for item in report.get("extras", {}).get("audio", []):
                 if not isinstance(item, dict):
@@ -703,6 +728,7 @@ def create_pack_mcp(
                 "containers": safe_containers,
                 "book_to_skills": safe_book_to_skills,
                 "ocr": safe_ocr,
+                "audio_transcription_estimate": safe_audio_estimate,
                 "coverage_categories": safe_coverage,
                 "restricted": safe_restricted,
                 "freshness": pack.freshness.model_dump() if pack.freshness else {},

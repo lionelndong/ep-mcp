@@ -183,6 +183,30 @@ context:
                     "manual_review_decision_counts": {"accept_ocr": 285, "graphic_or_blank": 55},
                 },
                 "audio": [{"path": r"C:\\private\\audio.mp3", "status": "metadata_ready_pending_transcription"}],
+                "audio_transcription_estimate": {
+                    "status": "ready_pending_openai_api",
+                    "metadata_available": True,
+                    "total_duration_seconds": 19652.6,
+                    "total_estimated_audio_minutes": 327.544,
+                    "total_estimated_chunks": 33,
+                    "api_called": False,
+                    "media_uploaded": False,
+                    "media_retained": False,
+                    "requires_openai_api_key": True,
+                    "sources": [{
+                        "source_id": "audio-source",
+                        "source_file": r"C:\\private\\audio.mp3",
+                        "status": "metadata_ready_pending_transcription",
+                        "duration_seconds": 19652.6,
+                        "estimated_audio_minutes": 327.544,
+                        "estimated_chunks": 33,
+                        "model": "gpt-4o-mini-transcribe",
+                        "timestamped_segments": True,
+                        "api_called": False,
+                        "media_uploaded": False,
+                        "media_retained": False,
+                    }],
+                },
                 "restricted": {
                     "status": "pending_external_authorization",
                     "unique_work_count": 0,
@@ -243,6 +267,8 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert coverage["pending"]["restricted_resolution_status"] == "pending_external_authorization"
         assert coverage["pending"]["audio"][0]["source_id"] == "derived-audio-audio"
         assert coverage["pending"]["audio"][0]["content_type"] == "audio"
+        assert coverage["audio_transcription_estimate"]["total_estimated_chunks"] == 33
+        assert coverage["audio_transcription_estimate"]["sources"][0]["source_id"] == "audio-source"
         serialized_coverage = json.dumps(coverage)
         assert "C:\\private" not in serialized_coverage
         assert "source_files" not in serialized_coverage
