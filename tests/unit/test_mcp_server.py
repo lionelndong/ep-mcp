@@ -251,3 +251,24 @@ async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack)
     assert row["video_id"] == "abc123"
     assert row["locator"] == "12s-20s"
     assert row["citation"] == "youtube/example-abc123-part-001.md lines 10-18"
+
+
+@pytest.mark.asyncio
+async def test_hormozi_search_expands_path_scopes_before_truncating(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(text="wrong scope", source_file="evidence/a.md", id="evidence/a", score=0.9),
+        SearchResult(text="right scope", source_file="youtube/b.md", id="youtube/b", score=0.8),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("search_hormozi_brain", {
+            "query": "offers",
+            "source_scope": "youtube",
+            "max_results": 1,
+        }))
+    assert [row["source_file"] for row in payload["results"]] == ["youtube/b.md"]
+    request = engine.search.await_args.args[0]
+    assert request.max_results == 4

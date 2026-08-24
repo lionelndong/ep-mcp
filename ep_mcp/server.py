@@ -318,19 +318,28 @@ def create_pack_mcp(
             not an assertion that Alex Hormozi personally made the answer.
             """
             normalized_scope = source_scope.strip().casefold() if source_scope else None
+            scoped_prefix = normalized_scope in {"evidence", "youtube", "curated-skills", "agent-skills", "ebook", "audio"}
+            # Path scopes are applied after retrieval because they are pack
+            # layout filters rather than ExpertPack frontmatter types. Fetch a
+            # wider candidate window first so a narrow scope is not starved by
+            # unrelated higher-ranked files, then honor the caller's limit.
+            retrieval_limit = max_results
+            if scoped_prefix:
+                retrieval_limit = min(50, max(max_results, max_results * 4))
             results = await ep_search(
                 engine,
                 query,
                 type=normalized_scope if normalized_scope in {"reference", "workflow", "concept", "decision", "gotcha", "phase"} else None,
                 tags=tags,
-                max_results=max_results,
+                max_results=retrieval_limit,
                 query_log_path=query_log_path,
             )
-            if normalized_scope in {"evidence", "youtube", "curated-skills", "agent-skills", "ebook", "audio"}:
+            if scoped_prefix:
                 results = [
                     result for result in results
                     if str(result.get("source_file", "")).startswith(normalized_scope + "/")
                 ]
+                results = results[:max_results]
             import re
             for result in results:
                 url_match = re.search(r"YouTube URL:\s*(https?://\S+)", str(result.get("text", "")))
