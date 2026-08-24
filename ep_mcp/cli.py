@@ -119,10 +119,12 @@ def validate(pack_path: str) -> None:
     try:
         pack = load_pack(pack_path)
     except PackLoadError as e:
-        click.echo(f"❌ Pack load failed: {e}", err=True)
+        # Keep CLI diagnostics ASCII-safe on Windows consoles that still use
+        # cp1252; callers can add their own visual decoration if desired.
+        click.echo(f"[ERROR] Pack load failed: {e}", err=True)
         sys.exit(1)
 
-    click.echo(f"✅ Pack loaded: {pack.name} ({pack.slug})")
+    click.echo(f"[OK] Pack loaded: {pack.name} ({pack.slug})")
     click.echo(f"   Type: {pack.type}")
     click.echo(f"   Version: {pack.version}")
     click.echo(f"   Files: {len(pack.files)}")
