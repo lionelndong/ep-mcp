@@ -256,6 +256,7 @@ async def test_hormozi_search_returns_cited_provenance_fields(tiny_hormozi_pack)
     assert row["title"] == "Example"
     assert row["confidence"] == "crawled"
     assert row["source_url"] == "https://youtube.com/watch?v=abc123"
+    assert row["citation_url"] == "https://youtube.com/watch?v=abc123&t=12s"
     assert row["video_id"] == "abc123"
     assert row["timestamp"] == "12s-20s"
     assert row["locator"] == "timestamp 12s-20s"
@@ -308,3 +309,22 @@ async def test_hormozi_search_normalizes_page_locator(tiny_hormozi_pack):
     assert row["locator"] == "page 17"
     assert row["citation"] == "ocr/src-example-page-0017.md page 17"
     assert row["confidence"] == "manually_transcribed"
+
+
+@pytest.mark.asyncio
+async def test_hormozi_search_supports_ocr_scope(tiny_hormozi_pack):
+    from mcp import Client
+
+    engine = AsyncMock()
+    engine.search.return_value = [
+        SearchResult(text="OCR page", source_file="ocr/source-page-0001.md", id="ocr/source/page-0001", score=0.8),
+        SearchResult(text="Book page", source_file="ebook/book.md", id="ebook/book", score=0.7),
+    ]
+    mcp = create_pack_mcp(tiny_hormozi_pack.slug, tiny_hormozi_pack, engine)
+    async with Client(mcp) as client:
+        payload = _payload(await client.call_tool("search_hormozi_brain", {
+            "query": "pricing",
+            "source_scope": "ocr",
+            "max_results": 1,
+        }))
+    assert [row["source_file"] for row in payload["results"]] == ["ocr/source-page-0001.md"]

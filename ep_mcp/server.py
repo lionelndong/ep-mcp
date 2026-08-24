@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -18,16 +20,15 @@ from .auth import APIKeyAuth
 from .config import ServerConfig
 from .embeddings.base import EmbeddingProvider
 from .embeddings.gemini import GeminiEmbeddingProvider
-from .embeddings.cache import QueryEmbeddingCache
 from .index.manager import IndexManager
 from .index.sqlite_store import SQLiteStore
 from .pack.loader import load_pack
 from .pack.models import Pack
-from .retrieval.engine import RetrievalEngine
-from .retrieval.reranker import Reranker
-from .retrieval.graph_helpers import GraphLookup
 from .prompts.pack_prompts import register_prompts
 from .resources.pack_resources import register_resources
+from .retrieval.engine import RetrievalEngine
+from .retrieval.graph_helpers import GraphLookup
+from .retrieval.reranker import Reranker
 from .tools.ep_graph_traverse import ep_graph_traverse
 from .tools.ep_list_topics import ep_list_topics
 from .tools.ep_read import ep_read
@@ -318,7 +319,15 @@ def create_pack_mcp(
             not an assertion that Alex Hormozi personally made the answer.
             """
             normalized_scope = source_scope.strip().casefold() if source_scope else None
-            scoped_prefix = normalized_scope in {"evidence", "youtube", "curated-skills", "agent-skills", "ebook", "audio"}
+            scoped_prefix = normalized_scope in {
+                "evidence",
+                "youtube",
+                "curated-skills",
+                "agent-skills",
+                "ebook",
+                "audio",
+                "ocr",
+            }
             # Path scopes are applied after retrieval because they are pack
             # layout filters rather than ExpertPack frontmatter types. Fetch a
             # wider candidate window first so a narrow scope is not starved by
@@ -340,7 +349,6 @@ def create_pack_mcp(
                     if str(result.get("source_file", "")).startswith(normalized_scope + "/")
                 ]
                 results = results[:max_results]
-            import re
             for result in results:
                 result_text = str(result.get("text", ""))
                 url_match = re.search(r"YouTube URL:\s*(https?://\S+)", result_text)
@@ -355,6 +363,28 @@ def create_pack_mcp(
                 if timestamp_match:
                     result["timestamp"] = timestamp_match.group(1).strip()
                     result["locator"] = f"timestamp {result['timestamp']}"
+                    # Keep the human-readable range, but also emit a direct
+                    # YouTube moment link whenever the transcript has a
+                    # numeric start locator.  This makes citations actionable
+                    # without asking an agent to reconstruct the URL itself.
+                    if result.get("source_url"):
+                        start = result["timestamp"].split("-", 1)[0].strip()
+                        seconds: int | None = None
+                        seconds_match = re.fullmatch(r"(\d+(?:\.\d+)?)s", start)
+                        clock_match = re.fullmatch(r"(?:(\d+):)?(\d{1,2}):(\d{2})", start)
+                        if seconds_match:
+                            seconds = max(0, int(float(seconds_match.group(1))))
+                        elif clock_match:
+                            hours = int(clock_match.group(1) or 0)
+                            minutes = int(clock_match.group(2))
+                            seconds = hours * 3600 + minutes * 60 + int(clock_match.group(3))
+                        if seconds is not None:
+                            parsed = urlsplit(result["source_url"])
+                            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+                            query["t"] = f"{seconds}s"
+                            result["citation_url"] = urlunsplit(
+                                (parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment)
+                            )
                 elif page_match:
                     result["page"] = int(page_match.group(1))
                     result["locator"] = f"page {result['page']}"
@@ -395,13 +425,13 @@ def create_pack_mcp(
             resolved_id = source_id
             if resolved_id and resolved_id.startswith("youtube-"):
                 video_id = resolved_id.removeprefix("youtube-")
-                prefix = f"youtube/"
+                prefix = "youtube/"
                 candidates = [
                     file_path for file_path in pack.files
                     if file_path.startswith(prefix) and file_path.endswith(f"-{video_id}-part-001.md")
                 ]
                 if candidates:
-                    path = sorted(candidates)[0]
+                    path = min(candidates)
                     return ep_read(pack, path=path, reconstruct=reconstruct)
                 resolved_id = f"alex-hormozi-brain/youtube/{video_id}"
             if path and (".." in Path(path).parts or path.startswith(("/", "\\"))):
@@ -815,7 +845,6 @@ def build_app(
         try:
             engine = pack_instances[slug].engine
             from .retrieval.models import SearchRequest
-            import time as _time
             search_req = SearchRequest(
                 query=q,
                 type=type_filter,
@@ -823,13 +852,13 @@ def build_app(
                 max_results=n,
                 reconstruct=reconstruct,
             )
-            _t0 = _time.monotonic()
+            _t0 = time.monotonic()
             raw_results = await engine.search(
                 search_req,
                 graph_expansion_confidence_threshold=conf_override,
                 graph_expansion_min_score=min_override,
             )
-            _elapsed_ms = (_time.monotonic() - _t0) * 1000
+            _elapsed_ms = (time.monotonic() - _t0) * 1000
             if config.query_log_path:
                 _embed_cached = getattr(engine.provider, "last_cache_hit", None)
                 log_query(
@@ -870,7 +899,7 @@ def build_app(
         """
         try:
             body = await request.json()
-        except Exception:
+        except ValueError:
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         if not isinstance(body, dict):
             return JSONResponse({"error": "JSON body must be an object"}, status_code=400)
@@ -937,7 +966,6 @@ def build_app(
         try:
             engine = pack_instances[slug].engine
             from .retrieval.models import SearchRequest
-            import time as _time
             search_req = SearchRequest(
                 query=q,
                 type=type_filter,
@@ -946,13 +974,13 @@ def build_app(
                 vector=vector,
                 reconstruct=reconstruct,
             )
-            _t0 = _time.monotonic()
+            _t0 = time.monotonic()
             raw_results = await engine.search(
                 search_req,
                 graph_expansion_confidence_threshold=conf_override,
                 graph_expansion_min_score=min_override,
             )
-            _elapsed_ms = (_time.monotonic() - _t0) * 1000
+            _elapsed_ms = (time.monotonic() - _t0) * 1000
             if config.query_log_path:
                 _embed_cached = getattr(engine.provider, "last_cache_hit", None)
                 log_query(
