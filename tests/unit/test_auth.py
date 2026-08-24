@@ -1,10 +1,11 @@
-from ep_mcp.auth import APIKeyAuth
-from ep_mcp.config import PackConfig, RateLimitConfig, ServerConfig
-from ep_mcp.server import _TokenBucketRateLimiter, build_app
 from types import SimpleNamespace
 
 import httpx
 import pytest
+
+from ep_mcp.auth import APIKeyAuth
+from ep_mcp.config import PackConfig, RateLimitConfig, ServerConfig
+from ep_mcp.server import _TokenBucketRateLimiter, build_app
 
 
 def test_environment_key_is_registered_for_empty_config(monkeypatch):
@@ -60,3 +61,33 @@ async def test_network_build_app_rejects_missing_pack_key(monkeypatch):
         mcp_response = await client.get("/packs/alex-hormozi-brain/mcp")
     assert response.status_code == 401
     assert mcp_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_network_build_app_accepts_key_and_enforces_rate_limit(monkeypatch):
+    monkeypatch.setenv("EP_MCP_KEY_ALEX_HORMOZI_BRAIN", "secret")
+
+    class DummyMCP:
+        session_manager = object()
+
+        def streamable_http_app(self, **_kwargs):
+            async def app(scope, receive, send):
+                from starlette.responses import JSONResponse
+                await JSONResponse({"ok": True})(scope, receive, send)
+            return app
+
+    pack = SimpleNamespace(name="Hormozi", type="person", version="1.0.0", files=[])
+    instance = SimpleNamespace(pack=pack, mcp=DummyMCP())
+    config = ServerConfig(
+        host="0.0.0.0",
+        packs=[PackConfig(slug="alex-hormozi-brain", path=".")],
+        rate_limit=RateLimitConfig(enabled=True, requests_per_minute=60, burst=1),
+    )
+    app = build_app(config, {"alex-hormozi-brain": instance})
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer secret"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        authorized = await client.get("/packs/alex-hormozi-brain/mcp", headers=headers)
+        throttled = await client.get("/packs/alex-hormozi-brain/mcp", headers=headers)
+    assert authorized.status_code == 200
+    assert throttled.status_code == 429
