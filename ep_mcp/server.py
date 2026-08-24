@@ -722,6 +722,15 @@ def create_pack_mcp(
                     }
                     for record in report.get("records", [])
                 ]
+                response["source_aliases"] = [
+                    {
+                        key: alias.get(key)
+                        for key in ("alias_id", "relative_path", "sha256", "status", "duplicate_of", "duplicate_group")
+                        if key in alias
+                    }
+                    for alias in book_to_skills.get("aliases", [])
+                    if isinstance(alias, dict)
+                ]
             return response
 
     # Register resources (always-tier files, overview, manifest, additional declared)

@@ -228,6 +228,8 @@ async def test_hormozi_brain_tools(tiny_hormozi_pack):
         assert coverage["inventory_records"] == 1
         assert coverage["containers"]["source_count"] == 3
         assert "book_to_skills" in coverage
+        full_coverage = _payload(await client.call_tool("get_brain_coverage", {"include_records": True}))
+        assert full_coverage["source_aliases"] == []
         assert coverage["ocr"]["requested_pages"] == 442
         assert coverage["ocr"]["recovered_pages"] == 442
         assert coverage["pending"]["ocr_pages"] == 0
